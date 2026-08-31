@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="canonical" href="https://hamyrappy.github.io/atlas-of-science/">
+
+<title>Атлас Науки — открытая инициатива</title>
+<meta name="description" content="Атлас Науки — открытая инициатива по созданию машиночитаемого представления научного знания. Разметка от карты области до дословного фрагмента источника.">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Атлас Науки">
+<meta property="og:title" content="Атлас Науки — открытая инициатива">
+<meta property="og:description" content="Машиночитаемое представление научного знания: от карты области до дословной строки в источнике.">
+<meta property="og:url" content="https://hamyrappy.github.io/atlas-of-science/">
+<meta property="og:locale" content="ru_RU">
+<meta name="twitter:card" content="summary_large_image">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* Aqua · Seafoam — светлая вариация палитры hamyrappy.com */
+    --bg:           #f2f9f7;
+    --bg-2:         #e6f2ee;
+    --bg-3:         #dcece7;
+    --ink:          #0a1d18;
+    --muted:        #46655e;
+    --faint:        #7b9a92;
+    --accent:       #0b7d67;
+    --accent-bright:#14b394;
+    --accent-dim:   #0a6152;
+    --line:         #cfe4de;
+    --line-2:       #b3d5cb;
+
+    --font-body: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --lh: 1.5;
+    --pad-top: clamp(44px, 7vh, 72px);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-text-size-adjust: 100%; font-size: 14.4px; scroll-behavior: smooth; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 1.125rem; font-weight: 300; line-height: var(--lh);
+    -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+  }
+  ::selection { background: var(--accent-bright); color: var(--bg); }
+  a { color: inherit; text-decoration: none; }
+  .sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); }
+  .label { font-size: 11px; font-weight: 500; letter-spacing: .2em; text-transform: uppercase; color: var(--accent); }
+
+  /* ===== shell ===== */
+  .page {
+    max-width: 1140px; margin: 0 auto;
+    padding: var(--pad-top) clamp(24px, 5vw, 60px) 80px;
+    display: grid; grid-template-columns: 288px 1fr; gap: clamp(44px, 5.5vw, 84px);
+    align-items: start;
+  }
+
+  /* ---- rail ---- */
+  .rail { position: sticky; top: clamp(56px, 10vh, 96px); }
+  .monogram {
+    display: inline-flex; align-items: center; gap: 9px; margin-bottom: 24px;
+    font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--faint);
+  }
+  .monogram .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-bright); box-shadow: 0 0 0 4px rgba(20,179,148,.14); }
+  h1 { font-weight: 400; font-size: clamp(2.1rem, 4vw, 2.9rem); line-height: 1.06; letter-spacing: -0.03em; margin-bottom: 14px; }
+  h1 .it { display: block; font-weight: 300; color: var(--accent); }
+  .tagline { font-weight: 300; font-size: 1.06rem; line-height: 1.42; color: var(--muted); max-width: 30ch; margin-bottom: 26px; padding-bottom: 24px; border-bottom: 1px solid var(--line-2); }
+
+
+  .railnav { margin-bottom: 22px; }
+  .railnav ol { list-style: none; display: flex; flex-direction: column; }
+  .railnav a {
+    font-size: .95rem; color: var(--muted); display: flex; gap: 12px; align-items: baseline;
+    padding: 7px 8px 7px 0; border-bottom: 1px solid var(--line); transition: color .18s, padding .2s;
+  }
+  .railnav li:first-child a { border-top: 1px solid var(--line); }
+  .railnav a .i { color: var(--faint); font-size: .78em; }
+  .railnav a:hover { color: var(--accent); padding-left: 6px; }
+  .railnav a:hover .i { color: var(--accent); }
+
+  .contact .label { display: block; margin-bottom: 13px; }
+  .contact-list { display: flex; flex-direction: column; gap: 10px; }
+  .contact-list a {
+    width: fit-content; font-size: .96rem; color: var(--ink);
+    display: inline-flex; align-items: baseline; gap: 9px;
+    border-bottom: 1px solid var(--line-2); padding-bottom: 2px; transition: color .18s, border-color .18s;
+  }
+  .contact-list a .ar { font-size: .8em; color: var(--accent-dim); transition: transform .18s; }
+  .contact-list a:hover { color: var(--accent); border-color: var(--accent); }
+  .contact-list a:hover .ar { transform: translate(2px,-2px); }
+
+  /* ---- content ---- */
+  .content { max-width: 720px; padding-top: 2px; }
+  section { margin-bottom: 58px; scroll-margin-top: 32px; }
+  section:last-of-type { margin-bottom: 0; }
+
+  /* section header — the structural anchor */
+  .sh { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+  .sh .num {
+    flex: none; width: 30px; height: 30px; border: 1px solid var(--accent-dim);
+    display: grid; place-items: center; font-size: 11px; font-weight: 500;
+    letter-spacing: .06em; color: var(--accent);
+  }
+  .sh h2 { font-size: 1.34rem; font-weight: 400; letter-spacing: -0.02em; line-height: 1.15; white-space: nowrap; }
+  .sh .rule { flex: 1 1 auto; height: 1px; background: var(--line-2); }
+
+  p { color: var(--muted); margin-bottom: 13px; max-width: 64ch; }
+  p:last-child { margin-bottom: 0; }
+  p strong { color: var(--ink); font-weight: 500; }
+  .lede { color: var(--ink); font-size: 1.1rem; }
+
+  figure { margin: 22px 0 16px; padding: 20px 18px; border: 1px solid var(--line-2); background: var(--bg-2); }
+  figure svg { width: 100%; height: auto; display: block; }
+  figcaption { font-size: .86rem; color: var(--faint); margin-top: 12px; line-height: 1.45; }
+
+  /* directions grid */
+  .dirs { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+  .dir { position: relative; border: 1px solid var(--line-2); padding: 15px 16px 16px; background: var(--bg); transition: background .2s, border-color .2s; }
+  .dir:hover { background: var(--bg-2); border-color: var(--accent-dim); }
+  .dir .dh { display: flex; align-items: baseline; gap: 10px; margin-bottom: 7px; padding-right: 74px; }
+  .dir .dn { font-size: 10px; color: var(--faint); letter-spacing: .1em; }
+  .dir .tag {
+    position: absolute; top: 15px; right: 14px;
+    font-size: 9px; letter-spacing: .14em; text-transform: uppercase;
+    padding: 3px 7px; border: 1px solid var(--line-2); color: var(--faint);
+  }
+  .dir .tag.on { border-color: var(--accent-bright); color: var(--accent); }
+  .dir .dt { font-size: 1.02rem; color: var(--ink); line-height: 1.25; }
+  .dir p { font-size: .93rem; color: var(--muted); line-height: 1.44; margin: 0; }
+
+  /* schema table */
+  .opts { list-style: none; border: 1px solid var(--line-2); }
+  .opts li { display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: baseline; padding: 11px 14px; border-bottom: 1px solid var(--line); background: var(--bg); }
+  .opts li:last-child { border-bottom: 0; }
+  .opts li.pick { background: var(--bg-3); }
+  .opts .key { font-size: 1rem; color: var(--faint); font-weight: 500; }
+  .opts li.pick .key { color: var(--accent); }
+  .opts .t { color: var(--ink); font-size: .98rem; }
+  .opts .s { color: var(--muted); font-size: .92rem; }
+
+  /* people */
+  .people { list-style: none; border: 1px solid var(--line-2); }
+  .people li { padding: 13px 16px; border-bottom: 1px solid var(--line); display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; background: var(--bg); }
+  .people li:last-child { border-bottom: 0; }
+  .people .pn { font-size: 1.02rem; color: var(--ink); }
+  .people .pr { font-size: .92rem; color: var(--muted); }
+  .people li.open { background: var(--bg-2); }
+  .people li.open .pn { color: var(--accent); }
+
+  /* timeline */
+  .tl { list-style: none; border-left: 1px solid var(--line-2); margin-left: 5px; }
+  .tl li { position: relative; padding: 0 0 15px 22px; }
+  .tl li::before { content: ''; position: absolute; left: -4.5px; top: 7px; width: 8px; height: 8px; border-radius: 50%; background: var(--bg); border: 1.5px solid var(--accent-bright); }
+  .tl .dt { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); margin-bottom: 2px; }
+  .tl li.fut::before { border-color: var(--line-2); }
+  .tl li.fut .dt { color: var(--faint); }
+  .tl li.fut .tx { color: var(--faint); }
+  .tl .tx { color: var(--muted); font-size: .95rem; line-height: 1.44; }
+  .tl .tx a { border-bottom: 1px solid var(--line-2); }
+  .tl .tx a:hover { color: var(--accent); border-color: var(--accent); }
+
+  .note { border-left: 2px solid var(--accent-bright); padding: 3px 0 3px 15px; color: var(--muted); font-size: .93rem; margin-top: 16px; line-height: 1.5; }
+
+  .cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+  .cta a { font-size: .94rem; padding: 10px 18px; border: 1px solid var(--accent-dim); color: var(--accent); transition: background .18s, color .18s; }
+  .cta a.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+  .cta a:hover { background: var(--accent-dim); color: var(--bg); border-color: var(--accent-dim); }
+
+  footer { margin-top: 50px; padding-top: 18px; border-top: 1px solid var(--line-2); font-size: 11px; letter-spacing: .06em; color: var(--faint); line-height: 1.9; }
+  footer a { border-bottom: 1px solid var(--line-2); }
+  footer a:hover { color: var(--accent); }
+
+  @media (max-width: 900px) {
+    .page { grid-template-columns: 1fr; gap: 0; padding: 56px 26px 64px; max-width: 660px; }
+    .rail { position: static; margin-bottom: 44px; }
+    .content { max-width: none; }
+    .railnav { display: none; }
+    .dirs { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 520px) {
+    html { font-size: 13.6px; }
+    .page { padding: 44px 20px 52px; }
+    .sh h2 { white-space: normal; }
+    figure { padding: 14px 10px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <aside class="rail">
+    <div class="monogram"><span class="dot"></span>Открытая инициатива</div>
+    <h1>Атлас <span class="it">Науки</span></h1>
+    <p class="tagline">Машиночитаемое представление научного знания.</p>
+
+
+    <nav class="railnav" aria-label="Разделы">
+      <ol>
+        <li><a href="#why"><span class="i">01</span>Зачем</a></li>
+        <li><a href="#how"><span class="i">02</span>Как устроено</a></li>
+        <li><a href="#ex"><span class="i">03</span>На примере</a></li>
+        <li><a href="#dirs"><span class="i">04</span>Направления</a></li>
+        <li><a href="#schema"><span class="i">05</span>Схема типов</a></li>
+        <li><a href="#people"><span class="i">06</span>Участники</a></li>
+        <li><a href="#path"><span class="i">07</span>Путь</a></li>
+        <li><a href="#join"><span class="i">08</span>Присоединиться</a></li>
+      </ol>
+    </nav>
+
+    <div class="contact">
+      <span class="label">Связаться</span>
+      <div class="contact-list">
+        <a href="mailto:atlas@hamyrappy.com"><span class="ar">✉</span>atlas@hamyrappy.com</a>
+        <a href="https://t.me/hamyrappy" target="_blank" rel="noopener"><span class="ar">↗</span>Telegram</a>
+        <a href="https://github.com/Hamyrappy" target="_blank" rel="noopener"><span class="ar">↗</span>GitHub</a>
+      </div>
+    </div>
+  </aside>
+
+  <main class="content">
+    <h2 class="sr-only">Атлас Науки — открытая инициатива</h2>
+
+    <section id="why">
+      <header class="sh"><span class="num">01</span><h2>Зачем</h2><span class="rule"></span></header>
+
+      <p class="lede">Одну статью языковая модель прочитает и без всякой разметки. Восемьдесят тысяч работ одной области — уже нет: в контекст они не помещаются, а перечитывать корпус под каждый вопрос дорого, и каждый раз выходит другой ответ.</p>
+
+      <p><strong>Атлас Науки читает корпус один раз и оставляет разметку:</strong> утверждения, вынутые из текста, приведённые к общим типам и связанные с дословным фрагментом источника. Дальше вопросы задают разметке, а не текстам. Спрашивать можно то, чего нет ни в одной отдельной работе: кто это уже утверждал, кто получил обратное, что воспроизвели.</p>
+
+      <p>Разметка — артефакт, а не генерация: её можно проверить, оспорить и переиспользовать. Пока общего формата нет, каждая система строит свой, и они не складываются.</p>
+    </section>
+
+    <section id="how">
+      <header class="sh"><span class="num">02</span><h2>Как устроено</h2><span class="rule"></span></header>
+
+      <p>Пять уровней. Каждый — сжатие нижнего, и каждый обязан ссылаться вниз. Узел, который не может показать источник, в Атлас не попадает.</p>
+
+      <figure>
+        <svg viewBox="0 0 740 470" role="img" aria-label="Пять уровней разметки">
+<g font-family="JetBrains Mono,monospace">
+<!-- scale column -->
+<g font-size="11" fill="var(--faint)" text-anchor="end">
+<text x="96" y="52">~10²</text><text x="96" y="130">~10³</text><text x="96" y="208">~10⁵</text><text x="96" y="286">~10⁶</text><text x="96" y="364">~10⁷</text>
+</g>
+<!-- level boxes -->
+<g>
+<rect x="118" y="22" width="286" height="56" fill="var(--bg)" stroke="var(--line-2)"></rect>
+<text x="134" y="46" font-size="13" fill="var(--accent)" letter-spacing="1.2">L4</text><text x="170" y="46" font-size="14.5" fill="var(--ink)">Карта области</text>
+<text x="170" y="64" font-size="11" fill="var(--faint)">портфель работ, дрейф тематик</text>
+<rect x="118" y="100" width="286" height="56" fill="var(--bg)" stroke="var(--line-2)"></rect>
+<text x="134" y="124" font-size="13" fill="var(--accent)" letter-spacing="1.2">L3</text><text x="170" y="124" font-size="14.5" fill="var(--ink)">Тема</text>
+<text x="170" y="142" font-size="11" fill="var(--faint)">кластер связанных работ</text>
+<rect x="118" y="178" width="286" height="56" fill="var(--bg)" stroke="var(--line-2)"></rect>
+<text x="134" y="202" font-size="13" fill="var(--accent)" letter-spacing="1.2">L2</text><text x="170" y="202" font-size="14.5" fill="var(--ink)">Документ</text>
+<text x="170" y="220" font-size="11" fill="var(--faint)">статья, отчёт, патент</text>
+<rect x="118" y="256" width="286" height="56" fill="var(--bg)" stroke="var(--line-2)"></rect>
+<text x="134" y="280" font-size="13" fill="var(--accent)" letter-spacing="1.2">L1</text><text x="170" y="280" font-size="14.5" fill="var(--ink)">Карточка</text>
+<text x="170" y="298" font-size="11" fill="var(--faint)">Result · Method · Claim · Dataset</text>
+<rect x="118" y="334" width="286" height="56" fill="var(--accent)"></rect>
+<text x="134" y="358" font-size="13" fill="#a9e7d8" letter-spacing="1.2">L0</text><text x="170" y="358" font-size="14.5" fill="#fff">Спан</text>
+<text x="170" y="376" font-size="11" fill="#bfeee2">дословный фрагмент источника</text>
+</g>
+<!-- provenance arrows -->
+<defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--accent-bright)"></path></marker></defs>
+<g stroke="var(--accent-bright)" stroke-width="1.3" marker-end="url(#ar)">
+<line x1="261" y1="78" x2="261" y2="98"></line><line x1="261" y1="156" x2="261" y2="176"></line><line x1="261" y1="234" x2="261" y2="254"></line><line x1="261" y1="312" x2="261" y2="332"></line>
+</g>
+<!-- example chips -->
+<g font-size="10.5">
+<g fill="var(--muted)">
+<rect x="436" y="22" width="220" height="56" fill="var(--bg-2)" stroke="var(--line-2)" stroke-dasharray="3 3"></rect>
+<text x="450" y="46">NLP · научная область</text><text x="450" y="63" fill="var(--faint)">~80 000 статей</text>
+<rect x="436" y="100" width="220" height="56" fill="var(--bg-2)" stroke="var(--line-2)" stroke-dasharray="3 3"></rect>
+<text x="450" y="124">instruction tuning</text><text x="450" y="141" fill="var(--faint)">тема внутри LLM-кластера</text>
+<rect x="436" y="178" width="220" height="56" fill="var(--bg-2)" stroke="var(--line-2)" stroke-dasharray="3 3"></rect>
+<text x="450" y="202">Ouyang et al., 2022</text><text x="450" y="219" fill="var(--faint)">InstructGPT</text>
+<rect x="436" y="256" width="220" height="56" fill="var(--bg-2)" stroke="var(--line-2)" stroke-dasharray="3 3"></rect>
+<text x="450" y="280">Result: 1.3B &gt; 175B</text><text x="450" y="297" fill="var(--faint)">по human eval</text>
+<rect x="436" y="334" width="220" height="56" fill="var(--bg-2)" stroke="var(--accent-dim)" stroke-dasharray="3 3"></rect>
+<text x="450" y="358" fill="var(--accent)">«…are preferred to…»</text><text x="450" y="375" fill="var(--faint)">§4.1, стр. 5, символы 214–388</text>
+</g>
+</g>
+<text x="436" y="12" font-size="10" fill="var(--faint)" letter-spacing="1.5">ПРИМЕР</text>
+<text x="118" y="12" font-size="10" fill="var(--faint)" letter-spacing="1.5">УРОВЕНЬ</text>
+<text x="96" y="12" font-size="10" fill="var(--faint)" letter-spacing="1.5" text-anchor="end">УЗЛОВ</text>
+<!-- side annotations -->
+<line x1="36" y1="196" x2="36" y2="34" stroke="var(--line-2)" stroke-width="1.2" marker-end="url(#ar)"></line>
+<line x1="36" y1="216" x2="36" y2="378" stroke="var(--accent-bright)" stroke-width="1.2" marker-end="url(#ar)"></line>
+<g font-size="10.5" text-anchor="middle">
+<text x="22" y="115" fill="var(--muted)" transform="rotate(-90 22 115)">обобщение · аналитика</text>
+<text x="22" y="297" fill="var(--accent)" transform="rotate(-90 22 297)">спуск к источнику · агент</text>
+</g>
+<text x="118" y="430" font-size="11.5" fill="var(--faint)">нет провенанса — нет узла</text>
+<line x1="118" y1="410" x2="656" y2="410" stroke="var(--line)" stroke-width="1"></line>
+<text x="656" y="430" font-size="11.5" fill="var(--accent)" text-anchor="end">каждый уровень обязан ссылаться вниз ↓</text>
+</g>
+</svg>
+        <figcaption>Одна разметка на двух читателей: аналитика работает с верхними уровнями, агент спускается по тем же уровням к точному месту в тексте. Справа — сквозной пример: от карты области до дословной строки в одной работе.</figcaption>
+      </figure>
+    </section>
+
+    <section id="ex">
+      <header class="sh"><span class="num">03</span><h2>На примере</h2><span class="rule"></span></header>
+
+      <p>Одна карточка целиком: утверждение вынуто из текста, типизировано, и каждое поле может показать свой источник.</p>
+
+      <figure>
+        <svg viewBox="0 0 740 300" role="img" aria-label="Карточка с провенансом">
+          <defs>
+            <marker id="arx" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M0 0L10 5L0 10z" fill="var(--accent-bright)"/>
+            </marker>
+          </defs>
+          <g font-family="JetBrains Mono, monospace">
+            <rect x="10" y="24" width="330" height="252" fill="var(--bg)" stroke="var(--line-2)"/>
+            <text x="26" y="14" font-size="10" fill="var(--faint)" letter-spacing="1.5">ИСТОЧНИК · OUYANG ET AL., 2022, §4.1</text>
+            <g font-size="11.5" fill="var(--muted)">
+              <text x="26" y="56">In human evaluations on our</text>
+              <text x="26" y="74">prompt distribution,</text>
+              <rect x="24" y="82" width="290" height="58" fill="rgba(20,179,148,.16)"/>
+              <g fill="var(--ink)">
+                <text x="26" y="98">outputs from the 1.3B parameter</text>
+                <text x="26" y="116">InstructGPT model are preferred</text>
+                <text x="26" y="134">to outputs from the 175B GPT-3,</text>
+              </g>
+              <text x="26" y="158">despite having 100x fewer</text>
+              <text x="26" y="176">parameters.</text>
+            </g>
+            <text x="26" y="216" font-size="10" fill="var(--accent)" letter-spacing="1">span #a41f · символы 214–388</text>
+            <line x1="26" y1="224" x2="196" y2="224" stroke="var(--accent-bright)" stroke-width="1"/>
+
+            <g stroke="var(--accent-bright)" stroke-width="1.3" fill="none">
+              <path d="M 340 111 L 398 111" marker-end="url(#arx)"/>
+            </g>
+            <text x="369" y="100" font-size="10" fill="var(--accent)" text-anchor="middle">извлечение</text>
+
+            <rect x="402" y="24" width="328" height="252" fill="var(--bg)" stroke="var(--accent-dim)"/>
+            <rect x="402" y="24" width="328" height="30" fill="var(--bg-3)"/>
+            <text x="418" y="44" font-size="11.5" fill="var(--accent)" letter-spacing="1">CARD · RESULT</text>
+            <text x="716" y="44" font-size="10" fill="var(--faint)" text-anchor="end">id r-0192</text>
+            <g font-size="11" fill="var(--faint)">
+              <text x="418" y="82">claim</text>
+              <text x="418" y="140">comparison</text>
+              <text x="418" y="176">evidence</text>
+              <text x="418" y="212">links</text>
+            </g>
+            <g font-size="11.5" fill="var(--ink)">
+              <text x="418" y="100">1.3B InstructGPT предпочтён 175B GPT-3</text>
+              <text x="418" y="118">по человеческой оценке</text>
+              <text x="505" y="140">InstructGPT-1.3B vs GPT-3-175B</text>
+            </g>
+            <text x="505" y="176" font-size="11.5" fill="var(--accent)" text-decoration="underline">span #a41f → §4.1</text>
+            <g font-size="11" fill="var(--muted)">
+              <text x="505" y="212">supports → r-0087</text>
+              <text x="505" y="230">refines → t-instruction-tuning</text>
+            </g>
+            <line x1="418" y1="252" x2="714" y2="252" stroke="var(--line)"/>
+            <text x="418" y="268" font-size="10" fill="var(--faint)">без поля evidence карточка не проходит приёмку</text>
+          </g>
+        </svg>
+        <figcaption>Каждое содержательное поле карточки указывает на спан. Ссылка проверяема: по ней агент открывает точный фрагмент, а не «похожий текст».</figcaption>
+      </figure>
+    </section>
+
+    <section id="dirs">
+      <header class="sh"><span class="num">04</span><h2>Направления</h2><span class="rule"></span></header>
+
+      <p>Работа разбита на направления. Они опираются на общий формат разметки, но не зависят друг от друга: направление можно вести, не дожидаясь остальных.</p>
+
+      <div class="dirs">
+        <article class="dir">
+          <span class="tag on">активно</span><div class="dh"><span class="dn">D1</span><span class="dt">Онтология</span></div>
+          <p>Каркас типов и правила, по которым он растёт, в том числе автоматически под конкретную область.</p>
+        </article>
+        <article class="dir">
+          <span class="tag on">активно</span><div class="dh"><span class="dn">D2</span><span class="dt">Извлечение и провенанс</span></div>
+          <p>От текста к карточкам со ссылкой на дословный фрагмент.</p>
+        </article>
+        <article class="dir">
+          <span class="tag on">активно</span><div class="dh"><span class="dn">D3</span><span class="dt">Доменная адаптация</span></div>
+          <p>Перенос в новую область: свой словарь при неизменном каркасе.</p>
+        </article>
+        <article class="dir">
+          <span class="tag">открыто</span><div class="dh"><span class="dn">D4</span><span class="dt">Поиск для агентов</span></div>
+          <p>Спуск от темы к карточке и к точному месту в источнике вместо поиска похожего текста.</p>
+        </article>
+        <article class="dir">
+          <span class="tag on">активно</span><div class="dh"><span class="dn">D5</span><span class="dt">Интерпретаторы верхних уровней</span></div>
+          <p>Карты областей, динамика тематик, портфели работ.</p>
+        </article>
+        <article class="dir">
+          <span class="tag">открыто</span><div class="dh"><span class="dn">D6</span><span class="dt">Консенсус и противоречия</span></div>
+          <p>Поддержка, противоречие, независимость свидетельств, воспроизводимость.</p>
+        </article>
+        <article class="dir">
+          <span class="tag">открыто</span><div class="dh"><span class="dn">D7</span><span class="dt">Оценка и приёмка</span></div>
+          <p>Чем измеряется качество разметки и когда она считается готовой.</p>
+        </article>
+        <article class="dir">
+          <span class="tag">открыто</span><div class="dh"><span class="dn">D8</span><span class="dt">Инфраструктура и данные</span></div>
+          <p>Хранение графа, воспроизводимая сборка, публикация в открытом доступе.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="schema">
+      <header class="sh"><span class="num">05</span><h2>Схема типов</h2><span class="rule"></span></header>
+
+      <p>Главная нерешённая развилка: откуда берётся схема типов. Пять вариантов на оси от жёсткой схемы к полной свободе; рабочая гипотеза — гибрид.</p>
+
+      <figure style="padding:16px 18px 8px">
+        <svg viewBox="0 0 700 96" role="img" aria-label="Ось вариантов схемы">
+<g font-family="JetBrains Mono,monospace">
+<line x1="30" y1="44" x2="670" y2="44" stroke="var(--line-2)" stroke-width="1.3"></line>
+<g font-size="10" fill="var(--faint)"><text x="30" y="16">жёсткая схема</text><text x="670" y="16" text-anchor="end">полная свобода</text></g>
+<g>
+<rect x="52" y="32" width="24" height="24" fill="var(--bg)" stroke="var(--line-2)"></rect><text x="64" y="49" font-size="11.5" fill="var(--muted)" text-anchor="middle">B</text><text x="64" y="82" font-size="10.5" fill="var(--muted)" text-anchor="middle">фиксированная</text>
+<rect x="238" y="26" width="36" height="36" fill="var(--accent)"></rect><text x="256" y="49" font-size="13" fill="#fff" text-anchor="middle">D</text><text x="256" y="82" font-size="10.5" fill="var(--accent)" text-anchor="middle">гибрид · выбрано</text>
+<rect x="500" y="32" width="24" height="24" fill="var(--bg)" stroke="var(--line-2)"></rect><text x="512" y="49" font-size="11.5" fill="var(--muted)" text-anchor="middle">C</text><text x="512" y="82" font-size="10.5" fill="var(--muted)" text-anchor="middle">индуцированная</text>
+<rect x="616" y="32" width="24" height="24" fill="var(--bg)" stroke="var(--line-2)"></rect><text x="628" y="49" font-size="11.5" fill="var(--muted)" text-anchor="middle">A</text><text x="628" y="82" font-size="10.5" fill="var(--muted)" text-anchor="middle">без схемы</text>
+<rect x="390" y="32" width="24" height="24" fill="var(--bg)" stroke="var(--accent-dim)" stroke-dasharray="3 2"></rect><text x="402" y="49" font-size="11.5" fill="var(--accent-dim)" text-anchor="middle">E</text><text x="402" y="82" font-size="10.5" fill="var(--faint)" text-anchor="middle">агентный контур</text>
+</g>
+</g>
+</svg>
+      </figure>
+
+      <ul class="opts">
+        <li><span class="key">A</span><div><span class="t">Без схемы.</span> <span class="s">Открытое извлечение, узлы — именные фразы. Структурный вопрос задать нельзя.</span></div></li>
+        <li><span class="key">B</span><div><span class="t">Фиксированная.</span> <span class="s">Типы заданы заранее. Предсказуемо, но нового не откроет и не переносится.</span></div></li>
+        <li><span class="key">C</span><div><span class="t">Индуцированная.</span> <span class="s">Типы выводятся из корпуса. Адаптивно, но нестабильно между прогонами.</span></div></li>
+        <li class="pick"><span class="key">D</span><div><span class="t">Гибрид — рабочая гипотеза.</span> <span class="s">Каркас заморожен, листовые классы растут из корпуса, перед созданием класса — проверка на переиспользование чужого термина.</span></div></li>
+        <li><span class="key">E</span><div><span class="t">Агентный контур.</span> <span class="s">Гибрид плюс агенты типизации, выравнивания и разрешения конфликтов. Когда гибрид заработает.</span></div></li>
+      </ul>
+
+    </section>
+
+    <section id="people">
+      <header class="sh"><span class="num">06</span><h2>Участники</h2><span class="rule"></span></header>
+
+
+      <ul class="people">
+        <li><span class="pn">Всеволод Каримов</span><span class="pr">инициатор · формат, извлечение, интерпретаторы</span></li>
+        <li><span class="pn">Арслан Галеев</span><span class="pr">онтология и её автоматическая сборка под домен</span></li>
+        <li><span class="pn">Анастасия Порошина</span><span class="pr">доменная адаптация: биоинформатика</span></li>
+        <li class="open"><span class="pn">Открыто</span><span class="pr">консенсус, оценка, инфраструктура, новые домены</span></li>
+      </ul>
+    </section>
+
+    <section id="path">
+      <header class="sh"><span class="num">07</span><h2>Путь</h2><span class="rule"></span></header>
+
+      <ul class="tl">
+        <li>
+          <div class="dt">Весна 2025</div>
+          <div class="tx">Начало проекта.</div>
+        </li>
+        <li>
+          <div class="dt">Июль 2026</div>
+          <div class="tx"><a href="https://hamyrappy.github.io/drift-inspector/" target="_blank" rel="noopener">Drift Inspector</a> — первый интерпретатор поверх разметки: 346 тыс. утверждений из 80 тыс. статей. Открытый код и данные.</div>
+        </li>
+        <li>
+          <div class="dt">Июль 2026</div>
+          <div class="tx"><a href="https://hamyrappy.github.io/metalcrow/" target="_blank" rel="noopener">MetalCrow</a> — тот же подход на материаловедении. Второй домен.</div>
+        </li>
+        <li>
+          <div class="dt">Август 2026</div>
+          <div class="tx">Первая публикация: EMNLP 2026.</div>
+        </li>
+        <li class="fut">
+          <div class="dt">Осень 2026</div>
+          <div class="tx">Онтология и её автоматическая сборка под домен.</div>
+        </li>
+        <li class="fut">
+          <div class="dt">Зима 2026</div>
+          <div class="tx">Поиск по разметке для исследовательских агентов.</div>
+        </li>
+        <li class="fut">
+          <div class="dt">Дальше</div>
+          <div class="tx">Консенсус между работами. Новые домены.</div>
+        </li>
+      </ul>
+
+      <div class="note">Инициатива независимая и открытая. Формат и движок остаются открытыми; системы, построенные на них для закрытых корпусов, — отдельные приложения.</div>
+    </section>
+
+    <section id="join">
+      <header class="sh"><span class="num">08</span><h2>Присоединиться</h2><span class="rule"></span></header>
+
+      <p>Напишите, если готовы взять направление из списка, предложить своё или поспорить с написанным.</p>
+
+      <div class="cta">
+        <a class="primary" href="mailto:atlas@hamyrappy.com?subject=Атлас%20Науки">Написать</a>
+        <a href="https://t.me/hamyrappy" target="_blank" rel="noopener">Telegram</a>
+        <a href="https://github.com/Hamyrappy/atlas-of-science" target="_blank" rel="noopener">Репозиторий</a>
+      </div>
+    </section>
+
+    <footer>
+      Атлас Науки — открытая инициатива. Инициатор — <a href="https://hamyrappy.com" target="_blank" rel="noopener">Всеволод Каримов</a>.<br>
+      Код — MIT, тексты и схемы — CC BY 4.0.
+    </footer>
+  </main>
+</div>
+</body>
+</html>
