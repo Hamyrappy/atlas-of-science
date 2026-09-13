@@ -1,8 +1,8 @@
 # Evaluation
 
 This document is the measurement contract. The code that computes these numbers does
-not exist yet, and neither do its types: they were removed along with the old contracts
-module rather than left standing as a claim that a stage exists. What remains is this
+not exist yet, and neither do its types: they were deleted with the module that used to
+declare them, rather than left standing as a claim that a step exists. What remains is this
 document and the `questions.yaml` that `atlas init` writes. The contract is written
 first so that the metrics are fixed before any result is visible, which is the only
 moment at which they can be chosen honestly.

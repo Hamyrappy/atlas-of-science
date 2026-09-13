@@ -102,7 +102,7 @@ def test_a_node_is_a_frozen_value() -> None:
     with pytest.raises(ValidationError):
         node().type = "Task"
     with pytest.raises(ValidationError):
-        node(run_id="run-1")
+        node(author="a-reviewer")
 
 
 def test_a_link_id_follows_from_what_it_relates_and_stands_on() -> None:

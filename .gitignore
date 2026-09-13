@@ -18,3 +18,7 @@ htmlcov/
 *.swp
 .DS_Store
 Thumbs.db
+
+# a run writes here by default
+/store/
+/renderings/

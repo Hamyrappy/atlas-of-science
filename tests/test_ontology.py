@@ -17,7 +17,7 @@ from atlas.ontology import load
 PACK = Path(__file__).parents[1] / "packs" / "ml_paper.yaml"
 NAMESPACE = "https://example.org/ontology/ml-paper#"
 
-EXTENSION = """
+SECOND = """
 types:
   - name: Assay
     parent: Method
@@ -29,7 +29,7 @@ predicates:
 """
 
 
-def write(tmp_path: Path, body: str, name: str = "extension.yaml") -> Path:
+def write(tmp_path: Path, body: str, name: str = "second.yaml") -> Path:
     path = tmp_path / name
     path.write_text(body, encoding="utf-8")
     return path
@@ -65,15 +65,15 @@ def test_curies_are_expanded_against_the_prefixes_of_their_own_pack() -> None:
 
 
 def test_the_version_is_the_hash_of_the_bytes_loaded(tmp_path: Path) -> None:
-    extension = write(tmp_path, EXTENSION)
+    second = write(tmp_path, SECOND)
     assert load(PACK).version == load(PACK).version
-    assert load(PACK, extension).version != load(PACK).version
-    assert load(PACK, extension).version != load(extension, PACK).version
-    assert len(load(PACK, extension).version) == 12
+    assert load(PACK, second).version != load(PACK).version
+    assert load(PACK, second).version != load(second, PACK).version
+    assert len(load(PACK, second).version) == 12
 
 
 def test_packs_merge_and_a_child_inherits_across_the_seam(tmp_path: Path) -> None:
-    schema = load(PACK, write(tmp_path, EXTENSION))
+    schema = load(PACK, write(tmp_path, SECOND))
     assay = schema.find_type("Assay")
     assert assay is not None and assay.parent == "Method"
     inherited = [field.name for field in schema.declared_fields("Assay")]

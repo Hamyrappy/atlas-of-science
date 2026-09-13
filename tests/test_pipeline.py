@@ -135,3 +135,10 @@ def test_the_summary_counts_what_the_steps_left_and_names_nothing_else(
         "nodes": "2", "unplaced": "0", "needs_review": "0", "violations": "0",
         "assertions": "2",
     }
+
+
+def test_the_configuration_the_repository_ships_resolves_against_the_pack_it_names() -> None:
+    pipeline = Pipeline.from_config(Path(__file__).parents[1] / "pipeline.yaml")
+
+    assert len(pipeline.steps) == 6
+    assert len(pipeline.schema.types) == 6
