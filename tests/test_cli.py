@@ -6,16 +6,15 @@ itself is replaced, since it is the one step that would need a model.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
-import pymupdf
 import pytest
 
 from atlas.cli import main
-from atlas.contracts import Card, Span
+from atlas.contracts import Card, Document, Span
 from atlas.extract import ExtractionResult
 from atlas.ingest import read_pdf
-from atlas.ingest.markdown import read_markdown
 
 MODEL_VARIABLES = ("ATLAS_BASE_URL", "ATLAS_MODEL", "ATLAS_API_KEY")
 PAGE_LINES = (
@@ -25,13 +24,9 @@ PAGE_LINES = (
 
 
 @pytest.fixture
-def pdf_path(tmp_path: Path) -> Path:
-    pdf = pymupdf.open()
-    for lines in PAGE_LINES:
-        page = pdf.new_page()
-        page.insert_text((72, 72), list(lines), fontsize=11)
+def pdf_path(tmp_path: Path, build_pdf: Callable[..., bytes]) -> Path:
     path = tmp_path / "sample.pdf"
-    path.write_bytes(pdf.tobytes())
+    path.write_bytes(build_pdf(PAGE_LINES))
     return path
 
 
@@ -83,20 +78,28 @@ def test_ingest_reports_a_source_it_cannot_read_on_one_line(
     assert len(capsys.readouterr().err.splitlines()) == 1
 
 
-def test_markdown_written_by_ingest_reads_back_with_the_same_pages(
-    pdf_path: Path, tmp_path: Path
+def test_extract_loads_the_markdown_ingest_wrote_with_the_same_pages(
+    pdf_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    for variable in MODEL_VARIABLES:
+        monkeypatch.setenv(variable, "unused")
     out = tmp_path / "markdown"
     main(["ingest", str(pdf_path), "--out", str(out)])
     document = read_pdf(pdf_path)
+    loaded: list[Document] = []
 
-    restored = read_markdown(out / f"{document.id}.md")
+    def record(source: Document, *_: object, **__: object) -> ExtractionResult:
+        loaded.append(source)
+        return ExtractionResult(cards=(), dropped=0, needs_review=0)
 
-    assert restored.id == document.id
-    assert restored.source == document.source
-    assert [(page.number, page.text) for page in restored.pages] == [
-        (page.number, page.text) for page in document.pages
-    ]
+    monkeypatch.setattr("atlas.cli.extract_cards", record)
+    markdown = out / f"{document.id}.md"
+
+    code = main(["extract", str(markdown), "--out", str(tmp_path / "cards.jsonl")])
+
+    assert code == 0
+    assert (loaded[0].id, loaded[0].source) == (document.id, document.source)
+    assert loaded[0].pages == document.pages
 
 
 def test_extract_without_the_model_environment_fails_on_one_line(

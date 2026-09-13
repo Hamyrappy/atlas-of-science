@@ -6,17 +6,12 @@ from atlas.contracts import Document, Page
 from atlas.extract.cards import STATEMENTS, ExtractionResult, build_schema, extract_cards
 from atlas.ontology import load, validate_card
 
-PAGE_ONE = (
-    "1 Introduction\n"
-    "Recovering a clean signal from noisy measurements is still an open task.\n"
-    "We introduce a wavelet prior that is fitted once and reused at inference time.\n"
-)
-PAGE_TWO = (
-    "2 Results\n"
-    "On the held-out split the error falls to 0.12, against 0.19 for the baseline.\n"
-)
 METHOD_QUOTE = "We introduce a wavelet prior that is fitted once and reused at inference time."
 RESULT_QUOTE = "On the held-out split the error falls to 0.12, against 0.19 for the baseline."
+PAGE_ONE = (
+    f"1 Introduction\nRecovering a clean signal from noise is an open task.\n{METHOD_QUOTE}\n"
+)
+PAGE_TWO = f"2 Results\n{RESULT_QUOTE}\n"
 
 DOCUMENT = Document(
     id="doc-1",
@@ -123,12 +118,14 @@ def test_an_inexact_quote_is_placed_but_flagged_for_review() -> None:
     assert "wavelet prior" in span.text
 
 
-def test_ids_are_stable_across_runs_and_differ_between_cards() -> None:
+def test_ids_are_stable_across_runs_and_identify_one_card() -> None:
     first = run([method()], [result_card()])
     second = run([method()], [result_card()], run_id="run-2")
+    twice = run([method()], [method()])
 
     assert [card.id for card in first.cards] == [card.id for card in second.cards]
     assert len({card.id for card in first.cards}) == 2
+    assert len(twice.cards) == 1
 
 
 def test_produced_cards_validate_against_the_core_ontology() -> None:

@@ -1,3 +1,5 @@
+"""Ontology tests: loading and merging the core with an extension, and the two validators."""
+
 from __future__ import annotations
 
 from pathlib import Path

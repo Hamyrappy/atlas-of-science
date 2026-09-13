@@ -81,6 +81,7 @@ def _fuzzy(document: Document, normalised: str, candidates: list[_Searchable]) -
     if not aligned:
         return None
 
+    # `max` keeps the first of equal scores, and the candidates lead with the hint.
     score, candidate, dest_start, dest_end = max(aligned, key=lambda hit: hit[0])
     start, end = _to_original(candidate.offsets, dest_start, dest_end)
     start, end = _whole_words(candidate.page.text, start, end)
@@ -128,9 +129,8 @@ def _trim(text: str, start: int, end: int) -> tuple[int, int]:
 def _whole_words(text: str, start: int, end: int) -> tuple[int, int]:
     """Complete the words a range cuts through.
 
-    Edit-distance alignment stops wherever the cheapest path does, routinely mid
-    word, and half a word is worthless as provenance. An edge already sitting on
-    whitespace cuts no word, so it is trimmed rather than grown.
+    Alignment stops wherever the cheapest path does, routinely mid word, and half
+    a word is worthless as provenance. An edge already on whitespace cuts no word.
     """
     start, end = _trim(text, start, end)
     while start > 0 and not text[start - 1].isspace():

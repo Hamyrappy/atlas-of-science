@@ -12,11 +12,11 @@ import hashlib
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
-from atlas.contracts import Card, Document, Frozen, Ontology, TypeDef
+from atlas.contracts import Card, Document, Frozen, Ontology
 from atlas.extract.relocate import locate
-from atlas.ontology import validate_card
+from atlas.ontology import declared_fields, validate_card
 
 if TYPE_CHECKING:
     from atlas.llm import Client
@@ -42,7 +42,7 @@ Page {page}:
 
 
 class ExtractionResult(Frozen):
-    """The cards one run produced, with a count of what it refused to write."""
+    """The cards one run produced, the statements it refused, and the cards to check."""
 
     cards: tuple[Card, ...]
     dropped: int
@@ -50,9 +50,10 @@ class ExtractionResult(Frozen):
 
 
 class _Statement(BaseModel):
-    """One item of the model's reply, before its quote has been located."""
+    """One item of the model's reply.
 
-    model_config = ConfigDict(extra="ignore")
+    The page it reports is not read: a card sits on the page its quote was found on.
+    """
 
     type: str
     fields: dict[str, str] = Field(default_factory=dict)
@@ -88,6 +89,7 @@ def extract_cards(
     schema = build_schema(ontology)
     catalogue = _catalogue(ontology)
     cards: list[Card] = []
+    seen: set[str] = set()
     dropped = 0
     needs_review = 0
     for number in numbers:
@@ -111,8 +113,13 @@ def extract_cards(
             if validate_card(card, ontology) != []:
                 dropped += 1
                 continue
+            # The same quote can come back while another page is read: same card.
+            if card.id in seen:
+                continue
+            seen.add(card.id)
             cards.append(card)
-            needs_review += int(match.needs_review)
+            if match.needs_review:
+                needs_review += 1
     return ExtractionResult(cards=tuple(cards), dropped=dropped, needs_review=needs_review)
 
 
@@ -137,15 +144,9 @@ def _card_id(doc_id: str, page: int, type_name: str, quote: str) -> str:
 
 def _catalogue(ontology: Ontology) -> str:
     """One line per type: its name, the fields it and its ancestors declare, its description."""
-    lines = []
-    for type_def in ontology.types:
-        fields: list[str] = []
-        walked: set[str] = set()
-        current: TypeDef | None = type_def
-        # Nothing checks the core file for a parent cycle, so the walk stops itself.
-        while current is not None and current.name not in walked:
-            walked.add(current.name)
-            fields.extend(name for name in current.fields if name not in fields)
-            current = ontology.find_type(current.parent) if current.parent else None
-        lines.append(f"- {type_def.name} [{', '.join(fields)}]: {type_def.description}")
+    lines = [
+        f"- {type_def.name} [{', '.join(declared_fields(type_def.name, ontology))}]: "
+        f"{type_def.description}"
+        for type_def in ontology.types
+    ]
     return "\n".join(lines)

@@ -1,10 +1,10 @@
-"""Ingest tests. The PDF under test is built by pymupdf in a fixture, not committed."""
+"""Tests for PDF ingest and the markdown rendering it writes."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
-import pymupdf
 import pytest
 import yaml
 
@@ -23,19 +23,9 @@ PAGE_LINES = (
 )
 
 
-def _build_pdf(lines_per_page: tuple[tuple[str, ...], ...], **metadata: str) -> bytes:
-    pdf = pymupdf.open()
-    for lines in lines_per_page:
-        page = pdf.new_page()
-        page.insert_text((72, 72), list(lines), fontsize=11)
-    if metadata:
-        pdf.set_metadata(metadata)
-    return pdf.tobytes()
-
-
 @pytest.fixture(scope="session")
-def pdf_bytes() -> bytes:
-    return _build_pdf(PAGE_LINES)
+def pdf_bytes(build_pdf: Callable[..., bytes]) -> bytes:
+    return build_pdf(PAGE_LINES)
 
 
 @pytest.fixture
@@ -80,19 +70,23 @@ def test_id_is_stable_across_reads_of_the_same_bytes(pdf_bytes: bytes, tmp_path:
     assert len(read_pdf(first).id) == 12
 
 
-def test_different_bytes_give_a_different_id(pdf_path: Path, tmp_path: Path) -> None:
+def test_different_bytes_give_a_different_id(
+    pdf_path: Path, tmp_path: Path, build_pdf: Callable[..., bytes]
+) -> None:
     other = tmp_path / "other.pdf"
-    other.write_bytes(_build_pdf((("A different sentence entirely.",),)))
+    other.write_bytes(build_pdf((("A different sentence entirely.",),)))
 
     assert read_pdf(other).id != read_pdf(pdf_path).id
 
 
-def test_meta_carries_title_and_author_only_when_declared(pdf_path: Path, tmp_path: Path) -> None:
+def test_meta_carries_title_and_author_only_when_declared(
+    pdf_path: Path, tmp_path: Path, build_pdf: Callable[..., bytes]
+) -> None:
     described = tmp_path / "described.pdf"
-    described.write_bytes(_build_pdf(PAGE_LINES, title="Light Response", author="M. Ivers"))
+    described.write_bytes(build_pdf(PAGE_LINES, title="A Title", author="An Author"))
 
-    assert read_pdf(described).meta["title"] == "Light Response"
-    assert read_pdf(described).meta["author"] == "M. Ivers"
+    assert read_pdf(described).meta["title"] == "A Title"
+    assert read_pdf(described).meta["author"] == "An Author"
     assert "title" not in read_pdf(pdf_path).meta
     assert "author" not in read_pdf(pdf_path).meta
 

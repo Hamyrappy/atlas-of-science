@@ -1,10 +1,9 @@
 """The command line: the two stages a person runs by hand.
 
 Each subcommand parses arguments, calls one library function and prints what it
-produced, so the behaviour worth testing lives in the library and not here. An
-expected failure, such as a missing file or an unset environment variable, is
-reported as one line on stderr; a traceback tells the person who mistyped a
-path nothing they can act on.
+produced, so the behaviour worth testing lives in the library. An expected
+failure, such as a missing file or an unset variable, is one line on stderr,
+because a traceback tells someone who mistyped a path nothing to act on.
 """
 
 from __future__ import annotations
@@ -16,8 +15,7 @@ from pathlib import Path
 
 from atlas.contracts import Card
 from atlas.extract import extract_cards
-from atlas.ingest import read_pdf, write_markdown
-from atlas.ingest.markdown import read_markdown
+from atlas.ingest import read_markdown, read_pdf, write_markdown
 from atlas.llm import Client, ModelConfig
 from atlas.ontology import load as load_ontology
 

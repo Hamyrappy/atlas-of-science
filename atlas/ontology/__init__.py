@@ -45,7 +45,7 @@ def validate_card(card: Card, ontology: Ontology) -> list[str]:
     if ontology.find_type(card.type) is None:
         violations.append(f"card {card.id}: unknown type {card.type!r}")
     else:
-        declared = _declared_fields(card.type, ontology)
+        declared = declared_fields(card.type, ontology)
         for key in card.fields:
             if key not in declared:
                 violations.append(
@@ -57,6 +57,14 @@ def validate_card(card: Card, ontology: Ontology) -> list[str]:
         if not span.text.strip():
             violations.append(f"card {card.id}: blank span at {span.doc_id} page {span.page}")
     return violations
+
+
+def declared_fields(name: str, ontology: Ontology) -> tuple[str, ...]:
+    """The fields a type declares, followed by the ones it inherits, without repeats."""
+    fields: list[str] = []
+    for type_def in _ancestry(name, ontology):
+        fields.extend(field for field in type_def.fields if field not in fields)
+    return tuple(fields)
 
 
 def validate_edge(edge: Edge, ontology: Ontology, src_type: str, dst_type: str) -> list[str]:
@@ -119,10 +127,6 @@ def _ancestry(name: str, ontology: Ontology) -> list[TypeDef]:
         chain.append(current)
         current = ontology.find_type(current.parent) if current.parent else None
     return chain
-
-
-def _declared_fields(name: str, ontology: Ontology) -> frozenset[str]:
-    return frozenset(field for t in _ancestry(name, ontology) for field in t.fields)
 
 
 def _is_a(name: str, expected: str, ontology: Ontology) -> bool:

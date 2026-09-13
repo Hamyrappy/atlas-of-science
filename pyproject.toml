@@ -6,6 +6,7 @@ build-backend = "hatchling.build"
 name = "atlas-of-science"
 version = "0.1.0"
 description = "An open library for machine-readable scientific markup."
+readme = "README.md"
 requires-python = ">=3.12"
 license = { file = "LICENSE" }
 dependencies = [
@@ -36,9 +37,8 @@ target-version = "py312"
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.per-file-ignores]
-# The artifact types are a stable interface and keep their `str, Enum` spelling.
+# The artifact types are frozen, so their `str, Enum` spelling cannot be modernised.
 "atlas/contracts.py" = ["UP042"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"

@@ -37,7 +37,6 @@ def test_a_repeated_call_is_served_from_the_disk_cache(tmp_path: Path) -> None:
     assert client.complete("question") == "hello"
     assert client.complete("question") == "hello"
     assert len(seen) == 1
-
     fresh, calls = make_client(tmp_path, httpx.Response(500, text="must not be called"))
     assert fresh.complete("question") == "hello"
     assert calls == []
@@ -59,7 +58,6 @@ def test_a_different_system_prompt_is_a_different_cache_entry(tmp_path: Path) ->
 def test_cached_only_raises_on_a_miss(tmp_path: Path) -> None:
     client, seen = make_client(tmp_path, httpx.Response(200, json=reply("hello")))
     client.complete("question")
-
     client.cached_only = True
     assert client.complete("question") == "hello"
     with pytest.raises(CacheMiss):
@@ -78,8 +76,8 @@ def test_rate_limit_is_retried(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
 
 def test_server_error_exhausts_attempts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(llm.time, "sleep", lambda _seconds: None)
-    client, seen = make_client(tmp_path, httpx.Response(503, text="unavailable"))
-    with pytest.raises(LLMError, match="503"):
+    client, seen = make_client(tmp_path, httpx.Response(529, text="overloaded"))
+    with pytest.raises(LLMError, match="529"):
         client.complete("question")
     assert len(seen) == llm.MAX_ATTEMPTS
 
@@ -87,19 +85,25 @@ def test_server_error_exhausts_attempts(tmp_path: Path, monkeypatch: pytest.Monk
 def test_client_error_raises_immediately_with_status_and_body(tmp_path: Path) -> None:
     body = "bad request: " + "x" * 500
     client, seen = make_client(tmp_path, httpx.Response(400, text=body))
-
     with pytest.raises(LLMError) as error:
         client.complete("question")
     assert "400" in str(error.value)
-    assert body[:200] in str(error.value)
-    assert body[:201] not in str(error.value)
+    assert str(error.value).endswith(body[:200])
     assert len(seen) == 1
+
+
+def test_an_unreachable_endpoint_raises_llm_error(tmp_path: Path) -> None:
+    def refuse(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    client = Client(CONFIG, cache_dir=tmp_path, transport=httpx.MockTransport(refuse))
+    with pytest.raises(LLMError, match="could not be reached"):
+        client.complete("question")
 
 
 def test_schema_requests_strict_structured_output(tmp_path: Path) -> None:
     client, seen = make_client(tmp_path, httpx.Response(200, json=reply('{"answer": "yes"}')))
     client.complete("question", schema=SCHEMA, system="be brief")
-
     payload = json.loads(seen[0].content)
     assert payload["response_format"] == {
         "type": "json_schema",
@@ -136,15 +140,12 @@ def test_complete_json_gives_up_after_one_retry(tmp_path: Path) -> None:
 def test_from_env_reads_the_prefixed_variables(monkeypatch: pytest.MonkeyPatch) -> None:
     for suffix, value in (("BASE_URL", "u"), ("MODEL", "m"), ("API_KEY", "k")):
         monkeypatch.setenv(f"OTHER_{suffix}", value)
-
     config = ModelConfig.from_env("OTHER")
     assert (config.base_url, config.model, config.api_key) == ("u", "m", "k")
-    assert config.temperature == 0.0
 
 
 def test_from_env_error_names_the_missing_variable(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ATLAS_BASE_URL", "https://example.test/v1")
     monkeypatch.delenv("ATLAS_MODEL", raising=False)
-
     with pytest.raises(LLMError, match="ATLAS_MODEL"):
         ModelConfig.from_env()

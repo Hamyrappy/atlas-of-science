@@ -30,6 +30,12 @@ def read_markdown(path: Path) -> Document:
     pages = _pages(text[front_matter.end() :])
     if not pages:
         raise ValueError(f"{path} has no page markers")
+    # Page text is stored byte for byte so that span offsets survive the rendering, which
+    # leaves a page whose own text holds a marker line to split in two here. Counting the
+    # pages against the header makes that an error rather than a document with moved offsets.
+    declared = header.get("page_count")
+    if declared is not None and declared != str(len(pages)):
+        raise ValueError(f"{path} declares {declared} pages but carries {len(pages)} markers")
     return Document(
         id=header["id"],
         source=header.get("source") or str(path),
