@@ -2,8 +2,9 @@
 
 Page text is stored exactly as the parser emits it, because every span made
 downstream is measured against it and normalising here would move offsets that
-stored artifacts already point at. The id hashes the file bytes, so a parser
-change yields a new document instead of silently keeping the old id.
+stored artifacts already point at. The id hashes the file bytes and so names the
+source; the text layer is named by `Document.text_hash`, which is what a reader
+of the rendering checks.
 """
 
 from __future__ import annotations
@@ -50,6 +51,7 @@ def to_markdown(document: Document) -> str:
         f"id: {json.dumps(document.id)}\n"
         f"source: {json.dumps(document.source)}\n"
         f"page_count: {len(document.pages)}\n"
+        f"text_hash: {json.dumps(document.text_hash)}\n"
         "---\n\n"
     )
     blocks = [

@@ -12,6 +12,7 @@ and a Span cannot be constructed without the exact substring it points at.
 
 from __future__ import annotations
 
+import hashlib
 from enum import Enum
 from typing import Literal
 
@@ -37,14 +38,29 @@ class Document(Frozen):
     """A source document after ingest.
 
     `pages[i].text` is fixed at ingest time and is the sole coordinate system for
-    every span that will ever point into this document. Re-running ingest with a
-    different parser produces a different document id, not a mutated document.
+    every span that will ever point into this document. The id names the source
+    file; `text_hash` names the text layer, and the two differ exactly when a
+    parser change moved the offsets under stored spans.
     """
 
     id: str
     source: str = Field(description="Path or URI the document was ingested from")
     pages: tuple[Page, ...] = Field(min_length=1)
     meta: dict[str, str] = Field(default_factory=dict)
+
+    @property
+    def text_hash(self) -> str:
+        """Hash of the text layer itself, which is what spans are measured against.
+
+        The id names the source file; two parsers reading that file agree on the
+        id and can still disagree on a ligature. Anything restoring a document
+        from a rendering compares this instead, so drifted text is caught rather
+        than silently shifting every offset.
+        """
+        digest = hashlib.sha256()
+        for page in self.pages:
+            digest.update(f"{page.number}\x00{page.text}\x00".encode())
+        return digest.hexdigest()[:12]
 
     def page_text(self, number: int) -> str:
         for page in self.pages:
@@ -74,6 +90,24 @@ class Span(Frozen):
         if self.end - self.start != len(self.text):
             raise ValueError("span offsets do not match the length of its text")
         return self
+
+    @classmethod
+    def of(cls, document: Document, page: int, start: int, end: int) -> Span:
+        """Cut a span out of a document, the only construction that cannot lie.
+
+        The text is taken from the page rather than supplied, so the offsets and
+        the quote cannot disagree. Every producer of provenance should come
+        through here; the plain constructor exists for deserialising what this
+        one already wrote.
+        """
+        text = document.page_text(page)[start:end]
+        if not text:
+            raise ValueError(f"empty span at {start}:{end} on page {page} of {document.id}")
+        return cls(doc_id=document.id, page=page, start=start, end=end, text=text)
+
+    def covers(self, page_text: str) -> bool:
+        """Whether the span still cuts its own text out of this page."""
+        return page_text[self.start : self.end] == self.text
 
 
 class Card(Frozen):

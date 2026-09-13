@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from atlas.contracts import Document, Page
+from atlas.contracts import Document, Page, Span
 from atlas.extract.relocate import THRESHOLD, Match, locate
 
 PAGE_ONE = (
@@ -145,3 +145,16 @@ def test_empty_quote_is_not_located(document: Document, quote: str) -> None:
 
 def test_quote_longer_than_the_page_is_not_located(document: Document) -> None:
     assert locate(document, PAGE_ONE + PAGE_TWO, page_hint=1) is None
+
+
+def test_span_of_cannot_disagree_with_its_document(document: Document) -> None:
+    """The classmethod takes the text from the page, so offsets and quote cannot drift."""
+    page_text = document.page_text(1)
+    start = page_text.index("Results")
+
+    span = Span.of(document, 1, start, start + 7)
+
+    assert span.text == "Results"
+    assert span.covers(page_text)
+    with pytest.raises(ValueError, match="empty span"):
+        Span.of(document, 1, start, start)

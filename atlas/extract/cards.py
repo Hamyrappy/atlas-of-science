@@ -103,7 +103,13 @@ def extract_cards(
                 dropped += 1
                 continue
             card = Card(
-                id=_card_id(document.id, match.span.page, statement.type, statement.quote),
+                id=_card_id(
+                    document.id,
+                    match.span.page,
+                    statement.type,
+                    statement.quote,
+                    statement.fields,
+                ),
                 type=statement.type,
                 fields=statement.fields,
                 spans=(match.span,),
@@ -113,7 +119,9 @@ def extract_cards(
             if validate_card(card, ontology) != []:
                 dropped += 1
                 continue
-            # The same quote can come back while another page is read: same card.
+            # The same statement can come back while another page is read: one card,
+            # and a repeat is not a loss. Two different statements sharing a quote
+            # differ in their fields and so no longer collide.
             if card.id in seen:
                 continue
             seen.add(card.id)
@@ -137,8 +145,15 @@ def _statements(reply: dict) -> tuple[list[_Statement], int]:
     return parsed, len(items) - len(parsed)
 
 
-def _card_id(doc_id: str, page: int, type_name: str, quote: str) -> str:
-    material = "\x00".join([doc_id, str(page), type_name, quote])
+def _card_id(doc_id: str, page: int, type_name: str, quote: str, fields: dict[str, str]) -> str:
+    """A content hash, so re-running over unchanged input rewrites the same ids.
+
+    The fields are part of the material: one sentence can carry two results, and
+    hashing the quote alone made the second one a duplicate of the first and
+    dropped it without counting it.
+    """
+    rendered = "\x1f".join(f"{key}={fields[key]}" for key in sorted(fields))
+    material = "\x00".join([doc_id, str(page), type_name, quote, rendered])
     return hashlib.sha256(material.encode("utf-8")).hexdigest()[:16]
 
 

@@ -146,3 +146,19 @@ def test_the_schema_offers_the_ontology_types_and_forbids_extra_keys() -> None:
     assert item["required"] == ["type", "fields", "quote", "page"]
     assert item["properties"]["page"]["type"] == "integer"
     assert item["properties"]["fields"]["additionalProperties"] == {"type": "string"}
+
+
+def test_two_statements_sharing_a_quote_both_survive() -> None:
+    """One sentence can carry two results; hashing the quote alone lost the second."""
+    client = FakeClient(
+        [
+            statement("Result", {"statement": "held-out error", "value": "0.12"}, RESULT_QUOTE, 2),
+            statement("Result", {"statement": "baseline error", "value": "0.19"}, RESULT_QUOTE, 2),
+        ]
+    )
+
+    result = extract_cards(DOCUMENT, ONTOLOGY, client, run_id="r1", pages=[2])
+
+    assert len(result.cards) == 2
+    assert len({card.id for card in result.cards}) == 2
+    assert result.dropped == 0

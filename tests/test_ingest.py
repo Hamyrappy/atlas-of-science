@@ -107,6 +107,7 @@ def test_front_matter_parses_as_yaml_with_string_scalars(pdf_path: Path) -> None
         "id": document.id,
         "source": str(pdf_path),
         "page_count": 2,
+        "text_hash": document.text_hash,
     }
     numeric = Document(id="123456789012", source=str(pdf_path), pages=document.pages)
     assert _front_matter(to_markdown(numeric))["id"] == "123456789012"

@@ -85,3 +85,28 @@ def test_an_id_that_looks_numeric_stays_a_string(tmp_path: Path) -> None:
     restored = read_markdown(write(tmp_path, document(*PAGES, doc_id="123456789012")))
 
     assert restored.id == "123456789012"
+
+
+def test_edited_rendering_is_refused(tmp_path: Path) -> None:
+    """An edit to a stored rendering moves the offsets under spans already written."""
+    document = Document(
+        id="deadbeef0001",
+        source="paper.pdf",
+        pages=tuple(Page(number=n, text=t) for n, t in enumerate(PAGES, start=1)),
+    )
+    path = write(tmp_path, document)
+    edited = path.read_text(encoding="utf-8").replace("segment", "segmen t")
+    path.write_text(edited, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="no longer matches"):
+        read_markdown(path)
+
+
+def test_round_trip_keeps_the_text_hash(tmp_path: Path) -> None:
+    document = Document(
+        id="deadbeef0002",
+        source="paper.pdf",
+        pages=tuple(Page(number=n, text=t) for n, t in enumerate(PAGES, start=1)),
+    )
+
+    assert read_markdown(write(tmp_path, document)).text_hash == document.text_hash

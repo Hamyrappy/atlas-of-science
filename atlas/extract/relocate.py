@@ -141,9 +141,6 @@ def _whole_words(text: str, start: int, end: int) -> tuple[int, int]:
 
 
 def _span_at(document: Document, page: int, start: int, end: int) -> Span:
-    """Build a span from offsets on the page text, the one place a Span is constructed."""
-    page_text = document.page_text(page)
-    start, end = _trim(page_text, start, end)
-    span = Span(doc_id=document.id, page=page, start=start, end=end, text=page_text[start:end])
-    assert page_text[span.start : span.end] == span.text
-    return span
+    """Build a span from offsets on the page text, after completing any cut word."""
+    start, end = _trim(document.page_text(page), start, end)
+    return Span.of(document, page, start, end)

@@ -2,8 +2,9 @@
 
 Extraction runs against a file on disk, and the markdown rendering is the
 on-disk form of a Document. Page text is restored exactly as it was written,
-under the id it was ingested with, so a span located in a restored document
-indexes the same coordinate system as one located right after ingest.
+under the id it was ingested with, and the hash of the text layer is checked, so
+a span located in a restored document indexes the same coordinate system as one
+located right after ingest.
 """
 
 from __future__ import annotations
@@ -36,12 +37,19 @@ def read_markdown(path: Path) -> Document:
     declared = header.get("page_count")
     if declared is not None and declared != str(len(pages)):
         raise ValueError(f"{path} declares {declared} pages but carries {len(pages)} markers")
-    return Document(
+    document = Document(
         id=header["id"],
         source=header.get("source") or str(path),
         pages=pages,
         meta={"page_count": str(len(pages))},
     )
+    # Spans stored earlier index the text layer this rendering was written from. An
+    # edit to the file moves those offsets without touching the id, so the hash of
+    # the text layer is what decides whether the document is still the same one.
+    declared_hash = header.get("text_hash")
+    if declared_hash is not None and declared_hash != document.text_hash:
+        raise ValueError(f"{path} has been edited since ingest: its text layer no longer matches")
+    return document
 
 
 def _header(block: str) -> dict[str, str]:

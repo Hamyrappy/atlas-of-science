@@ -79,12 +79,13 @@ atlas/
     relocate.py      a quoted fragment placed back into the page text as a Span
   llm.py             the chat client, with a disk cache in front of it
   cli.py             the two subcommands, ingest and extract
-tests/               77 tests; no network, no API key, no committed binaries
+tests/              the suite; no network, no API key, no committed binaries
 docs/
   architecture.md    the stage model, what each artifact guarantees, the open questions
   ontology.md        the core, how an extension descends from it, how the version is hashed
   evaluation.md      the measurement contract: competency questions, seams, negative controls
   initiative.ru.md   the Russian write-up of the initiative
+CLAUDE.md            how to work in this repository: invariants, layout, direction
 index.html           the project page
 ```
 
