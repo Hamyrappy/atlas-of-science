@@ -1,7 +1,7 @@
-"""CLI tests: argument handling, exit codes and the files each subcommand writes.
+"""CLI tests: argument handling, exit codes, and the files each subcommand leaves behind.
 
-The library runs for real, on a PDF built in a fixture; only the extraction call
-itself is replaced, since it is the one step that would need a model.
+The library runs for real, on a PDF built in a fixture and under a pack written by the
+test; only the extractor is the stub, since it is the one step that would need a model.
 """
 
 from __future__ import annotations
@@ -12,22 +12,41 @@ from pathlib import Path
 import pytest
 
 from atlas.cli import main
-from atlas.contracts import Card, Document, Span
-from atlas.extract import ExtractionResult
-from atlas.ingest import read_pdf
+from atlas.pipeline import Pipeline
+from atlas.scaffold import FILES
+from atlas.store.jsonl import JsonlStore
 
 MODEL_VARIABLES = ("ATLAS_BASE_URL", "ATLAS_MODEL", "ATLAS_API_KEY")
-PAGE_LINES = (
+LINES = (
     ("Iron oxidises in damp air.", "The rate rises with temperature."),
     ("A coating of zinc delays the onset.",),
 )
+PACK = """
+types:
+  - name: Thing
+    description: Anything the text names.
+    fields: [name]
+"""
+STEPS = """\
+  - ingest_pdf
+  - {stub_extract: {types: {Thing: name}}}
+  - relocate
+  - validate
+  - assert: {agent: run}
+"""
 
 
 @pytest.fixture
-def pdf_path(tmp_path: Path, build_pdf: Callable[..., bytes]) -> Path:
+def pdf(tmp_path: Path, build_pdf: Callable[..., bytes]) -> Path:
     path = tmp_path / "sample.pdf"
-    path.write_bytes(build_pdf(PAGE_LINES))
+    path.write_bytes(build_pdf(LINES))
     return path
+
+
+@pytest.fixture
+def model_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    for variable in MODEL_VARIABLES:
+        monkeypatch.setenv(variable, "unused")
 
 
 def test_no_subcommand_prints_usage_and_fails(capsys: pytest.CaptureFixture[str]) -> None:
@@ -37,112 +56,110 @@ def test_no_subcommand_prints_usage_and_fails(capsys: pytest.CaptureFixture[str]
     assert "usage: atlas" in capsys.readouterr().err
 
 
-def test_ingest_writes_a_markdown_file_and_reports_it(
-    pdf_path: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+@pytest.mark.usefixtures("model_environment")
+def test_run_writes_the_nodes_of_the_run_into_the_store_it_names(
+    pdf: Path, tmp_path: Path,
+    write_config: Callable[[str, str], Path], capsys: pytest.CaptureFixture[str],
 ) -> None:
-    out = tmp_path / "markdown"
+    store = tmp_path / "store"
 
-    code = main(["ingest", str(pdf_path), "--out", str(out)])
-    printed = capsys.readouterr().out
+    code = main(["run", str(write_config(PACK, STEPS)), str(pdf), "--store", str(store)])
+    printed = capsys.readouterr().out.splitlines()
 
-    document = read_pdf(pdf_path)
-    written = out / f"{document.id}.md"
+    nodes = JsonlStore(store).nodes()
     assert code == 0
-    assert written.exists()
-    assert printed.splitlines() == [f"{document.id}\t2\t{written}"]
+    assert [node.type for node in nodes] == ["Thing", "Thing"]
+    assert len(printed) == 1
+    assert printed[0].split("\t")[-3:] == ["violations 0", "assertions 2", f"store {store}"]
 
 
-def test_ingest_reads_every_pdf_it_is_given(
-    pdf_path: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+@pytest.mark.usefixtures("model_environment")
+def test_run_reads_every_input_it_is_given(
+    pdf: Path, tmp_path: Path,
+    write_config: Callable[[str, str], Path], capsys: pytest.CaptureFixture[str],
+    build_pdf: Callable[..., bytes],
 ) -> None:
     second = tmp_path / "second.pdf"
-    second.write_bytes(pdf_path.read_bytes())
+    second.write_bytes(build_pdf((("Copper corrodes more slowly.",),)))
 
-    code = main(["ingest", str(pdf_path), str(second), "--out", str(tmp_path / "markdown")])
-
-    assert code == 0
-    assert len(capsys.readouterr().out.splitlines()) == 2
-
-
-@pytest.mark.parametrize("contents", [None, b"not a pdf"], ids=["missing", "unreadable"])
-def test_ingest_reports_a_source_it_cannot_read_on_one_line(
-    contents: bytes | None, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    source = tmp_path / "source.pdf"
-    if contents is not None:
-        source.write_bytes(contents)
-
-    code = main(["ingest", str(source), "--out", str(tmp_path / "markdown")])
-
-    assert code != 0
-    assert len(capsys.readouterr().err.splitlines()) == 1
-
-
-def test_extract_loads_the_markdown_ingest_wrote_with_the_same_pages(
-    pdf_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    for variable in MODEL_VARIABLES:
-        monkeypatch.setenv(variable, "unused")
-    out = tmp_path / "markdown"
-    main(["ingest", str(pdf_path), "--out", str(out)])
-    document = read_pdf(pdf_path)
-    loaded: list[Document] = []
-
-    def record(source: Document, *_: object, **__: object) -> ExtractionResult:
-        loaded.append(source)
-        return ExtractionResult(cards=(), dropped=0, needs_review=0)
-
-    monkeypatch.setattr("atlas.cli.extract_cards", record)
-    markdown = out / f"{document.id}.md"
-
-    code = main(["extract", str(markdown), "--out", str(tmp_path / "cards.jsonl")])
+    code = main([
+        "run", str(write_config(PACK, STEPS)), str(pdf), str(second),
+        "--store", str(tmp_path / "store"),
+    ])
 
     assert code == 0
-    assert (loaded[0].id, loaded[0].source) == (document.id, document.source)
-    assert loaded[0].pages == document.pages
+    assert "sources 2" in capsys.readouterr().out
 
 
-def test_extract_without_the_model_environment_fails_on_one_line(
-    pdf_path: Path, tmp_path: Path,
+def test_run_without_the_model_environment_fails_on_one_line_and_writes_nothing(
+    pdf: Path, tmp_path: Path, write_config: Callable[[str, str], Path],
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
 ) -> None:
     for variable in MODEL_VARIABLES:
         monkeypatch.delenv(variable, raising=False)
-    out = tmp_path / "cards.jsonl"
+    store = tmp_path / "store"
 
-    code = main(["extract", str(pdf_path), "--out", str(out)])
+    code = main(["run", str(write_config(PACK, STEPS)), str(pdf), "--store", str(store)])
     captured = capsys.readouterr()
 
     assert code != 0
     assert len(captured.err.splitlines()) == 1
     assert "ATLAS_BASE_URL" in captured.err
-    assert not out.exists()
+    assert not store.exists()
 
 
-def test_extract_writes_one_card_per_line_and_reports_counts(
-    pdf_path: Path, tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+@pytest.mark.usefixtures("model_environment")
+@pytest.mark.parametrize(
+    ("steps", "expected"),
+    [(STEPS, "missing.yaml"), ("  - summarise\n", "unknown step")],
+    ids=["missing config", "unknown step"],
+)
+def test_run_reports_a_configuration_it_cannot_use_on_one_line(
+    steps: str, expected: str, pdf: Path, tmp_path: Path,
+    write_config: Callable[[str, str], Path], capsys: pytest.CaptureFixture[str],
 ) -> None:
-    for variable in MODEL_VARIABLES:
-        monkeypatch.setenv(variable, "unused")
-    document = read_pdf(pdf_path)
-    quote = document.page_text(1)[:10]
-    span = Span(doc_id=document.id, page=1, start=0, end=len(quote), text=quote)
-    card = Card(
-        id="0123456789abcdef", type="Claim", spans=(span,), run_id="run",
-        ontology_version="0" * 12,
-    )
-    result = ExtractionResult(cards=(card,), dropped=2, needs_review=1)
-    monkeypatch.setattr("atlas.cli.extract_cards", lambda *_, **__: result)
-    out = tmp_path / "cards" / "cards.jsonl"
+    config = write_config(PACK, steps)
+    named = config if expected == "unknown step" else tmp_path / "missing.yaml"
 
-    code = main(["extract", str(pdf_path), "--out", str(out)])
+    code = main(["run", str(named), str(pdf), "--store", str(tmp_path / "store")])
+    captured = capsys.readouterr()
 
-    lines = out.read_text(encoding="utf-8").splitlines()
-    written = Card.model_validate_json(lines[0])
-    restored = written.spans[0]
+    assert code != 0
+    assert len(captured.err.splitlines()) == 1
+    assert expected in captured.err
+
+
+def test_init_writes_a_project_and_prints_every_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    project = tmp_path / "corpus"
+
+    code = main(["init", str(project)])
+    printed = capsys.readouterr().out.splitlines()
+
     assert code == 0
-    assert len(lines) == 1
-    assert written == card
-    assert document.page_text(restored.page)[restored.start : restored.end] == restored.text
-    assert capsys.readouterr().out.splitlines() == ["cards 1\tdropped 2\tneeds review 1"]
+    assert printed == [str(project / name) for name in FILES]
+    assert all((project / name).exists() for name in FILES)
+
+
+def test_init_refuses_to_overwrite_a_project_already_there(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    main(["init", str(tmp_path)])
+    (tmp_path / "pack.yaml").write_text("types: []\n", encoding="utf-8")
+
+    code = main(["init", str(tmp_path)])
+    captured = capsys.readouterr()
+
+    assert code != 0
+    assert len(captured.err.splitlines()) == 1
+    assert (tmp_path / "pack.yaml").read_text(encoding="utf-8") == "types: []\n"
+
+
+def test_the_project_init_writes_is_a_configuration_that_loads(tmp_path: Path) -> None:
+    main(["init", str(tmp_path)])
+
+    pipeline = Pipeline.from_config(tmp_path / "pipeline.yaml")
+
+    assert pipeline.schema.type_names() == {"Thing"}
+    assert len(pipeline.steps) == 6

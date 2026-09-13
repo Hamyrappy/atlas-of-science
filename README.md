@@ -1,7 +1,7 @@
 # Atlas of Science
 
-An open library for machine-readable scientific markup: a corpus is read once and turned into
-typed cards, each bound to a verbatim fragment of its source.
+A substrate for machine-readable markup: a corpus is read once and turned into typed things, each
+bound to a verbatim fragment of its source, under whatever ontology you plug in.
 
 Project page: [`index.html`](index.html) · Russian overview: [`docs/initiative.ru.md`](docs/initiative.ru.md)
 
@@ -12,23 +12,43 @@ it cannot: they do not fit in a context window, re-reading the corpus for every 
 more each time it is asked, and every pass returns a slightly different answer.
 
 So the corpus is read once and what is left behind is markup. Statements are lifted out of the
-text, given types from a shared ontology and stored as cards. Downstream systems query the cards
-instead of the texts, which makes the expensive pass a fixed cost rather than a recurring one.
+text, typed against an ontology and stored with the fragment they came from. Downstream systems
+query that instead of the texts, which makes the expensive pass a fixed cost rather than a
+recurring one.
 
-A card is worth querying only because it carries the fragment it came from. Every span stores the
+Which types exist is not the library's business. The core carries six concepts and no domain
+vocabulary at all; the types, fields and predicates arrive at run time from packs of YAML, and the
+steps that produce them are named in a configuration file rather than wired into the code. Reading
+a different field, or reading papers differently, is a pack and a configuration, not a fork.
+
+A node is worth querying only because it carries the fragment it came from. Every span stores the
 exact substring together with the offsets it was taken at, so any statement in the markup can be
-checked against the page that produced it, and a text layer that has drifted since ingest is
+checked against the text that produced it, and a text layer that has drifted since ingest is
 detectable instead of silently wrong.
 
 ```
 L4  field map   portfolios of work, drift of topics
-L3  topic       a cluster of related documents
-L2  document    one source, read once
-L1  card        Result · Method · Claim · Dataset
+L3  topic       a cluster of related sources
+L2  source      one document, read once
+L1  node        a typed thing, of whichever types the loaded pack declares
 L0  span        a verbatim fragment of the source
 ```
 
 No provenance, no node.
+
+## The metamodel
+
+Six concepts, and nothing of any domain:
+
+- **Source** — something that was read. Its text layer is fixed at ingest and hashed.
+- **Span** — a verbatim region of a source; its offsets re-slice to the stored text.
+- **Node** — a typed thing. The type is a term of the loaded schema; the fields are whatever that
+  schema declares.
+- **Link** — a typed relation between nodes, itself an object with its own id, fields and evidence.
+- **Assertion** — who asserted what, when, on what evidence, and what it supersedes. This is the
+  unit of writing: nodes and links are the projection of a history, not rows to be updated.
+- **Schema** — the ontology plugged in underneath: types, fields and predicates, each with an IRI
+  and optional mappings to public vocabularies.
 
 ## Install
 
@@ -36,53 +56,63 @@ No provenance, no node.
 pip install -e ".[dev]"
 ```
 
-`atlas extract` talks to a chat-completions endpoint and reads three environment variables:
-`ATLAS_BASE_URL` (the base URL of the endpoint), `ATLAS_MODEL` (the model name sent with each
-request) and `ATLAS_API_KEY` (the bearer token). Replies are cached under `.atlas-cache/`, so a
-repeated run over unchanged input makes no requests.
+A run talks to a chat-completions endpoint and reads three environment variables: `ATLAS_BASE_URL`
+(the base URL of the endpoint), `ATLAS_MODEL` (the model name sent with each request) and
+`ATLAS_API_KEY` (the bearer token). Replies are cached under `.atlas-cache/`, so a repeated run
+over unchanged input makes no requests.
 
 ## Quickstart
 
 ```console
 $ export ATLAS_BASE_URL=https://api.example.com/v1 ATLAS_MODEL=your-model ATLAS_API_KEY=secret
 
-$ atlas ingest paper.pdf --out markdown/
-4f3c2b1a9e8d	12	markdown/4f3c2b1a9e8d.md
+$ atlas init corpus/
+corpus/pack.yaml
+corpus/pipeline.yaml
+corpus/questions.yaml
+corpus/README.md
 
-$ atlas extract markdown/4f3c2b1a9e8d.md --out cards.jsonl
-cards 37	dropped 4	needs review 6
+$ atlas run corpus/pipeline.yaml paper.pdf --store store/
+inputs 1	sources 1	renderings 1	statements 41	malformed 0	nodes 33	unplaced 4	needs_review 6	violations 2	assertions 33	store store
 
-$ head -n 3 cards.jsonl
-{"id":"9f2c41ab7d0e5b83","type":"Result","fields":{"statement":"F1 rises by 3.4 points","value":"3.4"},"spans":[{"doc_id":"4f3c2b1a9e8d","page":6,"start":812,"end":866,"text":"Our model improves F1 by 3.4 points over the baseline."}],"run_id":"20260913T101500Z","ontology_version":"5d41402abc4b"}
-{"id":"c07be4185a93d216","type":"Dataset","fields":{"name":"public benchmark"},"spans":[{"doc_id":"4f3c2b1a9e8d","page":6,"start":1187,"end":1240,"text":"We evaluate on the public benchmark released in 2019."}],"run_id":"20260913T101500Z","ontology_version":"5d41402abc4b"}
-{"id":"3ad8f0b6e2c14975","type":"Claim","fields":{"statement":"attention carries the gain"},"spans":[{"doc_id":"4f3c2b1a9e8d","page":7,"start":2043,"end":2095,"text":"Ablating the attention layer costs 3.4 points of F1."}],"run_id":"20260913T101500Z","ontology_version":"5d41402abc4b"}
+$ head -n 1 store/assertions.jsonl
+{"id":"8c5c97324ba55420","agent":{"id":"run:2026-09-13T10:15:00+00:00","kind":"run","label":""},"at":"2026-09-13T10:15:00+00:00","target":{"id":"b3a1c4696f1af143","spans":[{"source_id":"3a750328a5e6","segment":1,"start":0,"end":54,"text":"Our model improves F1 by 3.4 points over the baseline."}],"schema_version":"2775c3049803","type":"Result","fields":{"statement":"Our model improves F1 by 3.4 points over the baseline."}},"supersedes":null,"confidence":null}
 ```
 
-`ingest` prints one line per PDF: document id, page count, path written. `extract` takes either
-that markdown rendering or the PDF itself, writes one card per line, and reports how many
-statements it refused because their quote could not be found on the page, and how many landed
-through a relaxed search and are worth a look.
+`init` writes a pack to fill in, a configuration naming it, a questions file and a note; edit the
+pack and the run is about your domain. `run` prints one line: every count the steps it was
+configured with left behind — how many statements the model offered, how many were refused because
+their quote could not be located, how many landed through a relaxed search and are worth a look,
+how many the pack rejected, and how many assertions were written. The store is append-only, so a
+second run lands under what is already recorded rather than replacing it.
+
+To read a corpus under the six machine-learning types this project started with, name the pack
+that still holds them:
+
+```yaml
+schema: packs/ml_paper.yaml
+```
 
 ## Layout
 
 ```
 atlas/
-  contracts.py       the artifact types every stage exchanges; frozen
-  ontology/
-    __init__.py      loading, merging, card and edge validation
-    core.yaml        the shared core: six node types, eight predicates
-  ingest/
-    pdf.py           a PDF becomes a Document and a markdown rendering
-    markdown.py      that rendering read back into the same Document
-  extract/
-    cards.py         one model call per page, typed statements out
-    relocate.py      a quoted fragment placed back into the page text as a Span
+  model/             the metamodel: source, span, node, link, assertion, schema
+  ontology/          reading packs off disk and merging them into one schema
+  store/             the append-only log, in memory and on disk, and the projections over it
+  steps/             ingest, rendering, extraction, relocation, validation, recording
+  pipeline.py        a configuration of step names run in order over one dict of state
+  scaffold.py        the project skeleton `atlas init` writes
   llm.py             the chat client, with a disk cache in front of it
-  cli.py             the two subcommands, ingest and extract
-tests/              the suite; no network, no API key, no committed binaries
+  cli.py             the two subcommands, run and init
+packs/
+  ml_paper.yaml      one domain's ontology: six node types and eight predicates
+  README.md          what a pack is and how to write one
+pipeline.yaml        the default run over that pack
+tests/               the suite; no network, no API key, no committed binaries
 docs/
-  architecture.md    the stage model, what each artifact guarantees, the open questions
-  ontology.md        the core, how an extension descends from it, how the version is hashed
+  architecture.md    the metamodel, the step model, the store, the open questions
+  ontology.md        what a pack declares, how identity works, how the version is hashed
   evaluation.md      the measurement contract: competency questions, seams, negative controls
   initiative.ru.md   the Russian write-up of the initiative
 CLAUDE.md            how to work in this repository: invariants, layout, direction
@@ -91,26 +121,28 @@ index.html           the project page
 
 ## Design
 
-- Every stage is a function from artifacts to artifacts, with no state shared between stages.
-- The models in `atlas/contracts.py` are the only thing a stage may rely on in another stage.
-- The ontology is a YAML file rather than code, and its content hash travels on every card.
+- Nothing under `atlas/` names a type, a field or a predicate of any domain. `tests/test_substrate.py`
+  runs the shipped steps over an invented ontology and holds that claim to it.
+- A step is a function from the run's state to the keys it adds, registered under a name. Replacing
+  one is naming a different one in the configuration file.
+- The models in `atlas/model/` are the only thing one step may rely on in another.
+- Writing is asserting: a store is an append-only log, and the graph is the projection of it. A
+  correction supersedes; nothing is overwritten.
 - The model is asked for a verbatim quote and never for character offsets, which it would invent;
-  offsets are recovered by searching the page text.
-- There is no storage layer: stages read and write files, and a database can be introduced once a
-  query needs one.
+  offsets are recovered by searching the segment text.
 
 ## Status
 
-Working today: PDF ingest, with a markdown rendering that reads back into the same document and
-the same page offsets; the ontology loader, with domain extensions, inherited fields, and card
-and edge validation; card extraction over a document page by page, each card bound to a located
-span and dropped when no span can be found; the cached model client; the `ingest` and `extract`
-subcommands.
+Working today: the metamodel and its projections; pack loading, merging, identity and validation;
+an append-only store in memory and as JSON lines on disk; the steps for PDF ingest, a markdown
+rendering that reads back into the same source and the same offsets, extraction of typed statements
+one segment at a time, relocation of each quote into a span, validation against the loaded pack and
+recording as assertions; the cached model client; the `run` and `init` subcommands.
 
-Not implemented yet: edge extraction, so `Edge` and `validate_edge` exist but nothing produces a
-relation; retrieval, answering and evaluation, whose artifact types are declared in
-`atlas/contracts.py` and unused; the levels above L1; any index or storage. Only the core
-ontology ships with the library; no domain extension does.
+Not implemented yet: link extraction, so a `Link` validates and stores but no step produces one;
+canonicalisation across sources; retrieval, answering and evaluation, whose contract is written in
+`docs/evaluation.md` and whose code does not exist; the levels above L1; a store in a database.
+One pack ships, for machine-learning papers, and it is an example rather than a core.
 
 ## Licence
 

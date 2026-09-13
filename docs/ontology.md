@@ -1,89 +1,127 @@
 # The ontology
 
-## What the core is
+## There is no core
 
-`atlas/ontology/core.yaml` declares six node types (Task, Method, Dataset, Metric,
-Result, Claim) and eight predicates between them. It is the frozen part of the
-schema: editing it changes the version of every run made afterwards, and is a
-decision about the format rather than about a corpus.
+The library ships no vocabulary. `atlas.ontology.load()` with nothing to load returns an empty
+schema — no types, no predicates — and every type a corpus uses arrives from a pack named in a
+configuration file. Nothing under `atlas/` mentions a type, a field or a predicate of any domain,
+and `tests/test_substrate.py` runs the shipped steps over an invented one to keep it that way.
 
-It is small for two reasons. A type earns its place only if it is recognisable in
-any field that publishes measured work; a type that makes sense in one field alone
-would make markup from two fields incomparable, and belongs in an extension. And
-the core is shown to the extractor on every page, so fifty types would spend
-context on distinctions no reader can draw reliably.
+This was not always so. Six machine-learning types used to be built into the library as a core
+that every other type had to descend from. They now live in `packs/ml_paper.yaml` as one domain's
+pack among others, loaded only when a configuration asks for it. A core buys comparability between
+two domains and charges for it in every domain that does not fit; identity, below, buys the same
+thing without the tax.
 
-## Every extension type descends from a core type
+## What a pack declares
 
-`load(core_path=None, extension_path=None)` reads the core, reads an optional
-extension, and merges them. An extension type must declare a `parent`, and that
-parent must already be known when the child is read: a core type, or a type
-declared earlier in the same extension file. Forward references are refused, which
-also rules out parent cycles, so the ancestor walks in this module terminate.
-
-Descent buys three things. A consumer that knows only the core can read any
-extension by folding a type to its nearest core ancestor, which is what keeps two
-domains comparable. Fields are inherited along the ancestor chain, so an extension
-type declares only what it adds. And core predicates keep working on extension
-types, because `domain` and `range` are checked by ancestry rather than by name
-equality: a `Method` predicate accepts any descendant of `Method`.
-
-## The shape of an extension file
-
-An extension file has the same two keys as the core, `types` and `predicates`. The
-only difference is that `parent` is required on every type.
+A pack is one YAML file with three optional keys: `prefixes`, `types`, `predicates`.
 
 ```yaml
+prefixes:
+  obs: https://example.org/ontology/observation#
+  schema: https://schema.org/
+
 types:
-  - name: BrewingSchedule
-    parent: Method
-    fields: [water_temperature, steep_time]
-    description: A timing and temperature plan for preparing an infusion.
+  - name: Observation
+    iri: obs:Observation
+    description: Something recorded as having happened, at a place and a time.
+    fields: [subject, value]
+
+  - name: SpectralObservation
+    iri: obs:SpectralObservation
+    parent: Observation
+    mappings: [schema:Observation]
+    fields:
+      - name: wavelength
+        datatype: number
+        iri: obs:wavelength
+
+  - name: Instrument
+    iri: obs:Instrument
+    description: A device a recording was taken with.
+    fields: [name]
+
+predicates:
+  - name: recorded_with
+    iri: obs:recordedWith
+    domain: Observation
+    range: Instrument
+    description: The observation was taken with this instrument.
 ```
 
-A predicate takes `name`, `domain`, `range` and an optional `description`; domain
-and range may name a core type or an extension type. Type names and predicate
-names each live in one flat namespace across both files, and a duplicate is
-refused at load time.
+A field is a bare name, or a mapping declaring `datatype` and `iri`; that shorthand is the only
+sugar in the loader. `description` is what the extractor is shown, so it is written for a reader
+who has never seen the pack. `mappings` are identities in somebody else's vocabulary and are
+stored verbatim, never expanded: guessing what a foreign CURIE means against a local prefix map
+would be the same guess made twice.
+
+## Identity, not labels
+
+A name is local to one pack; an IRI outlives it. A pack that declares `prefixes` is claiming
+identities, so the loader requires an `iri` on every type and every predicate in it. CURIEs are
+expanded against the prefixes of **their own file**, before the merge, so a term means what its
+file said even when another pack redeclares the prefix.
+
+Lookup then accepts either form: `find_type("Observation")`, `find_type("obs:Observation")` and
+`find_type("https://example.org/ontology/observation#Observation")` are the same type, and
+`is_a("SpectralObservation", "obs:Observation")` is true. A node may carry its type as a name or as
+an IRI; validation resolves both. This is what lets two packs be compared without either of them
+descending from a common ancestor: the claim "these two types are the same" is an identity, not a
+position in a tree.
+
+## Parents and inheritance
+
+`parent` is optional. A type that declares one inherits its fields — own fields first, then the
+parent's, without repeats — and satisfies any predicate whose `domain` or `range` names an
+ancestor: a `recorded_with` that expects an `Observation` accepts a `SpectralObservation`. The
+parent may be declared anywhere in the merged packs, before or after the child; what is refused is
+a parent that resolves nowhere. A cycle between two parents is not refused at load time, but the
+ancestor walk terminates on one rather than hanging.
+
+## Merging several packs
+
+`load(*paths)` merges in the order given: prefix maps are merged with the later pack winning a
+repeated prefix, and types and predicates are concatenated. A type name or a predicate name
+declared twice is an error — the flat namespace is what makes a bare name usable at all. Splitting
+a vocabulary across files is therefore free, and a corpus that needs a general pack plus a local
+extension names both.
 
 ## How the version hash works
 
-`Ontology.version` is the first twelve hex characters of the SHA-256 over the raw
-bytes of the core file followed by the raw bytes of the extension file. It hashes
-bytes, not the parsed structure, so reordering entries or editing a comment yields
-a new version. That is intended: the file text is what the extractor is shown.
+`Schema.version` is the first twelve hex characters of the SHA-256 over the raw bytes of every pack
+loaded, concatenated in the order given. It hashes bytes, not the parsed structure, so reordering
+entries or editing a comment yields a new version, and naming the same two packs in the other order
+yields another. That is intended: the file text is what the extractor is shown.
 
-Every card and every edge carries `ontology_version`. This is what makes markup
-written last month still interpretable after this month's edit. You can tell which
-schema a card was written under, refuse to merge two runs made under different
-schemas, or revalidate old cards against the new ontology and see exactly what the
-edit broke. The version is an identity, not a sequence number: it does not say
-which of two ontologies is newer.
+Every node and every link carries that version as `schema_version`. This is what makes markup
+written last month still interpretable after this month's edit. You can tell which packs an object
+was written under, refuse to merge two runs made under different ones, or revalidate old objects
+against the new schema and see exactly what the edit broke. The version is an identity, not a
+sequence number: it does not say which of two schemas is newer.
 
 ## Validation reports violations, it does not raise
 
-`validate_card(card, ontology)` and `validate_edge(edge, ontology, src_type,
-dst_type)` each return a list of strings; an empty list means valid. They do not
-raise, because a run exists to measure the markup it actually produced. Aborting on
-the first bad card would throw away the evidence and report nothing.
+`Schema.validate_node(node)` and `Schema.validate_link(link, src_type, dst_type)` each return a
+list of strings; an empty list means valid. They do not raise, because a run exists to measure the
+markup it actually produced — the `validate` step keeps what the schema accepts, carries the rest
+of the violations forward in the state, and the run reports both counts. Aborting on the first bad
+node would throw away the evidence and report nothing.
 
-A broken ontology file does raise: unparsable YAML, an extension type with a
-missing or unknown parent, a duplicate name. Those are defects in a hand-written
-input, detected before any card exists.
+A broken pack does raise: unparsable YAML, a pack that is not a mapping, an unknown parent, a
+duplicate name, a prefixed pack whose term declares no IRI, a key nobody declared. Those are
+defects in a hand-written input, detected before any node exists.
 
 ## The metric that matters
 
-The share of cards and edges with at least one violation.
+The share of nodes and links with at least one violation.
 
-Extracted cards read well one at a time. Fluent field text, a quote that looks like
-a quote, a predicate name that sounds right in the sentence. None of that
-distinguishes an extraction that works from one that only looks like it. The
-violation share is computed against the declared schema instead: a run that invents
-type names, puts fields on types that do not declare them, or joins the wrong two
-types with a predicate is emitting text shaped like markup that will not answer a
-query.
+Extracted nodes read well one at a time. Fluent field text, a quote that looks like a quote, a
+predicate name that sounds right in the sentence. None of that distinguishes an extraction that
+works from one that only looks like it. The violation share is computed against the declared schema
+instead: a run that invents type names, puts fields on types that do not declare them, or joins the
+wrong two types with a predicate is emitting text shaped like markup that will not answer a query.
 
-Report it split by artifact (cards, edges) and by violation kind, because the fixes
-differ: an unknown type usually means the extension is missing a type, while a
-domain mismatch usually means the extraction is wrong. Report it with the offending
-cases attached, per `docs/evaluation.md`.
+Report it split by kind of object and by kind of violation, because the fixes differ: an unknown
+type usually means the pack is missing a type, while a domain mismatch usually means the extraction
+is wrong. Report it with the offending cases attached, per `docs/evaluation.md`.

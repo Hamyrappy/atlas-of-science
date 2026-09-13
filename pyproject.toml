@@ -36,9 +36,5 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
-[tool.ruff.lint.per-file-ignores]
-# The artifact types are frozen, so their `str, Enum` spelling cannot be modernised.
-"atlas/contracts.py" = ["UP042"]
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]

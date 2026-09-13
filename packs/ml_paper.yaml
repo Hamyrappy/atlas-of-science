@@ -1,73 +1,90 @@
-# The frozen core of the markup. Six node types and eight relations, chosen to be
-# the smallest set that still lets two domains be compared: everything a domain
-# adds must descend from a type here.
-#
-# Editing this file changes the ontology version of every run made after it, and
-# is a decision about the format, not about a corpus. Domain vocabulary belongs
-# in an extension file, never here.
+# A pack for machine-learning papers: what a result is, what it was measured on, and
+# what the authors conclude from it. Six types and eight relations, the smallest set
+# that still lets two papers be compared. Nothing here is part of the core -- load it
+# when the corpus is of this kind, and write another pack when it is not.
+
+prefixes:
+  ml: https://example.org/ontology/ml-paper#
+  schema: https://schema.org/
+  dcat: http://www.w3.org/ns/dcat#
 
 types:
   - name: Task
+    iri: ml:Task
     description: A problem being addressed, stated independently of any solution.
     fields: [name, definition]
 
   - name: Method
+    iri: ml:Method
     description: A procedure, model or technique applied to a task.
     fields: [name, summary]
 
   - name: Dataset
+    iri: ml:Dataset
     description: A body of data a method was applied to or evaluated on.
+    mappings: [schema:Dataset, dcat:Dataset]
     fields: [name, description]
 
   - name: Metric
+    iri: ml:Metric
     description: A quantity used to judge a result.
     fields: [name, unit]
 
   - name: Result
-    description: A measured outcome, tied to the method, dataset and metric it was obtained with.
+    iri: ml:Result
+    description: A measured outcome, tied to the method, dataset and metric it came from.
     fields: [statement, value, conditions]
 
   - name: Claim
-    description: An assertion the authors make about the world, which a result may support or contradict.
+    iri: ml:Claim
+    description: An assertion about the world, which a result may support or contradict.
     fields: [statement, scope]
 
 predicates:
   - name: addresses
+    iri: ml:addresses
     domain: Method
     range: Task
     description: The method is proposed as a solution to the task.
 
   - name: evaluated_on
+    iri: ml:evaluatedOn
     domain: Method
     range: Dataset
     description: The method was run against this data.
 
   - name: measured_by
+    iri: ml:measuredBy
     domain: Result
     range: Metric
     description: The result is expressed in this metric.
 
   - name: obtained_by
+    iri: ml:obtainedBy
     domain: Result
     range: Method
     description: The result was produced by this method.
 
   - name: reported_for
+    iri: ml:reportedFor
     domain: Result
     range: Dataset
     description: The result was obtained on this data.
 
   - name: supports
+    iri: ml:supports
     domain: Result
     range: Claim
     description: The result is offered as evidence for the claim.
 
   - name: contradicts
+    iri: ml:contradicts
     domain: Result
     range: Claim
     description: The result is evidence against the claim.
 
   - name: extends
+    iri: ml:extends
     domain: Method
     range: Method
     description: The method is presented as a development of an earlier one.

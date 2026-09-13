@@ -1,7 +1,8 @@
-"""Tests for reading the markdown rendering back into a Document.
+"""Tests for the markdown rendering of a source and for reading it back.
 
-The rendering is the on-disk form of a Document, so the property under test is
-that page text and page offsets come back exactly as they went out.
+The rendering is the on-disk form of a Source, so the properties under test are that
+segment text and segment offsets come back exactly as they went out, and that a file
+someone has edited since is refused rather than read.
 """
 
 from __future__ import annotations
@@ -9,32 +10,85 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import yaml
 
-from atlas.contracts import Document, Page
-from atlas.ingest import read_markdown, to_markdown
+from atlas.model import Segment, Source, Span
+from atlas.steps import get
+from atlas.steps.markdown import read_markdown, to_markdown, write_markdown
 
-PAGES = ("The task is to segment cells.\nWe introduce a model.\n", "The model reached 0.912.\n")
+TEXTS = ("The task is to segment cells.\nWe introduce a model.\n", "The model reached 0.912.\n")
 
 
-def write(tmp_path: Path, document: Document) -> Path:
-    path = tmp_path / f"{document.id}.md"
-    path.write_text(to_markdown(document), encoding="utf-8")
+def source(*texts: str, source_id: str = "4f3c2b1a9e8d") -> Source:
+    segments = tuple(Segment(number=n, text=text) for n, text in enumerate(texts, start=1))
+    return Source(id=source_id, origin="corpus/paper.pdf", segments=segments)
+
+
+def write(tmp_path: Path, value: Source) -> Path:
+    path = tmp_path / f"{value.id}.md"
+    path.write_text(to_markdown(value), encoding="utf-8")
     return path
 
 
-def document(*texts: str, doc_id: str = "4f3c2b1a9e8d") -> Document:
-    pages = tuple(Page(number=number, text=text) for number, text in enumerate(texts, start=1))
-    return Document(id=doc_id, source="corpus/paper.pdf", pages=pages)
+def _segment_body(markdown: str, number: int) -> tuple[str, int]:
+    marker = f"<!-- segment {number} -->\n"
+    start = markdown.index(marker) + len(marker)
+    end = markdown.find("<!-- segment ", start)
+    return (markdown[start:] if end == -1 else markdown[start:end]), start
 
 
-def test_a_rendering_reads_back_into_the_same_pages(tmp_path: Path) -> None:
-    original = document(*PAGES)
+def test_the_rendering_keeps_the_markers_and_the_segment_text() -> None:
+    original = source(*TEXTS)
+    markdown = to_markdown(original)
+
+    for number in (1, 2):
+        body, _ = _segment_body(markdown, number)
+        assert original.segment_text(number) in body
+
+
+def test_front_matter_parses_as_yaml_with_string_scalars() -> None:
+    original = source(*TEXTS)
+
+    assert yaml.safe_load(to_markdown(original).split("---\n", 2)[1]) == {
+        "id": original.id,
+        "origin": "corpus/paper.pdf",
+        "segments": 2,
+        "text_hash": original.text_hash,
+    }
+    numeric = source(*TEXTS, source_id="123456789012")
+    assert yaml.safe_load(to_markdown(numeric).split("---\n", 2)[1])["id"] == "123456789012"
+
+
+def test_segment_offsets_survive_the_rendering() -> None:
+    original = source(*TEXTS)
+    quote = "The model reached"
+    start = original.segment_text(2).index(quote)
+    span = Span.of(original, 2, start, start + len(quote))
+
+    markdown = to_markdown(original)
+    _, body_start = _segment_body(markdown, 2)
+
+    assert markdown[body_start + span.start : body_start + span.end] == span.text
+
+
+def test_write_markdown_names_the_file_after_the_source(tmp_path: Path) -> None:
+    original = source(*TEXTS)
+
+    written = write_markdown(original, tmp_path / "out")
+
+    assert written == tmp_path / "out" / f"{original.id}.md"
+    assert written.read_text(encoding="utf-8") == to_markdown(original)
+
+
+def test_a_rendering_reads_back_into_the_same_segments(tmp_path: Path) -> None:
+    original = source(*TEXTS)
 
     restored = read_markdown(write(tmp_path, original))
 
     assert restored.id == original.id
-    assert restored.source == original.source
-    assert restored.pages == original.pages
+    assert restored.origin == original.origin
+    assert restored.segments == original.segments
+    assert restored.text_hash == original.text_hash
 
 
 @pytest.mark.parametrize(
@@ -42,16 +96,16 @@ def test_a_rendering_reads_back_into_the_same_pages(tmp_path: Path) -> None:
     ["", "no trailing newline", "several\n\n\nblank lines\n\n", "  leading and trailing  \n"],
     ids=["empty", "unterminated", "blank-lines", "padded"],
 )
-def test_page_text_survives_the_round_trip_character_for_character(
+def test_segment_text_survives_the_round_trip_character_for_character(
     text: str, tmp_path: Path
 ) -> None:
-    restored = read_markdown(write(tmp_path, document(text, "a second page\n")))
+    restored = read_markdown(write(tmp_path, source(text, "a second segment\n")))
 
-    assert restored.page_text(1) == text
+    assert restored.segment_text(1) == text
 
 
-def test_a_page_whose_text_holds_a_marker_is_refused_rather_than_split(tmp_path: Path) -> None:
-    path = write(tmp_path, document("text\n<!-- page 9 -->\nmore\n", "a second page\n"))
+def test_a_segment_whose_text_holds_a_marker_is_refused_rather_than_split(tmp_path: Path) -> None:
+    path = write(tmp_path, source("text\n<!-- segment 9 -->\nmore\n", "a second segment\n"))
 
     with pytest.raises(ValueError, match="markers"):
         read_markdown(path)
@@ -59,7 +113,7 @@ def test_a_page_whose_text_holds_a_marker_is_refused_rather_than_split(tmp_path:
 
 def test_a_file_without_front_matter_is_refused(tmp_path: Path) -> None:
     path = tmp_path / "bare.md"
-    path.write_text("<!-- page 1 -->\nsome text\n", encoding="utf-8")
+    path.write_text("<!-- segment 1 -->\nsome text\n", encoding="utf-8")
 
     with pytest.raises(ValueError, match="front matter"):
         read_markdown(path)
@@ -67,46 +121,40 @@ def test_a_file_without_front_matter_is_refused(tmp_path: Path) -> None:
 
 def test_front_matter_without_an_id_is_refused(tmp_path: Path) -> None:
     path = tmp_path / "anonymous.md"
-    path.write_text('---\nsource: "a.pdf"\n---\n\n<!-- page 1 -->\ntext\n', encoding="utf-8")
+    path.write_text('---\norigin: "a.pdf"\n---\n\n<!-- segment 1 -->\ntext\n', encoding="utf-8")
 
-    with pytest.raises(ValueError, match="document id"):
+    with pytest.raises(ValueError, match="source id"):
         read_markdown(path)
 
 
-def test_a_rendering_without_page_markers_is_refused(tmp_path: Path) -> None:
+def test_a_rendering_without_markers_is_refused(tmp_path: Path) -> None:
     path = tmp_path / "unmarked.md"
     path.write_text('---\nid: "abc123abc123"\n---\n\nplain prose\n', encoding="utf-8")
 
-    with pytest.raises(ValueError, match="page markers"):
+    with pytest.raises(ValueError, match="segment markers"):
         read_markdown(path)
 
 
 def test_an_id_that_looks_numeric_stays_a_string(tmp_path: Path) -> None:
-    restored = read_markdown(write(tmp_path, document(*PAGES, doc_id="123456789012")))
+    restored = read_markdown(write(tmp_path, source(*TEXTS, source_id="123456789012")))
 
     assert restored.id == "123456789012"
 
 
-def test_edited_rendering_is_refused(tmp_path: Path) -> None:
+def test_an_edited_rendering_is_refused(tmp_path: Path) -> None:
     """An edit to a stored rendering moves the offsets under spans already written."""
-    document = Document(
-        id="deadbeef0001",
-        source="paper.pdf",
-        pages=tuple(Page(number=n, text=t) for n, t in enumerate(PAGES, start=1)),
+    path = write(tmp_path, source(*TEXTS))
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("cells", "cel ls"), encoding="utf-8"
     )
-    path = write(tmp_path, document)
-    edited = path.read_text(encoding="utf-8").replace("segment", "segmen t")
-    path.write_text(edited, encoding="utf-8")
 
     with pytest.raises(ValueError, match="no longer matches"):
         read_markdown(path)
 
 
-def test_round_trip_keeps_the_text_hash(tmp_path: Path) -> None:
-    document = Document(
-        id="deadbeef0002",
-        source="paper.pdf",
-        pages=tuple(Page(number=n, text=t) for n, t in enumerate(PAGES, start=1)),
-    )
+def test_the_two_steps_write_and_read_the_same_sources(tmp_path: Path) -> None:
+    written = get("render_markdown")({"sources": (source(*TEXTS),)}, out=str(tmp_path / "out"))
 
-    assert read_markdown(write(tmp_path, document)).text_hash == document.text_hash
+    restored = get("ingest_markdown")({"inputs": written["renderings"]})
+
+    assert restored["sources"] == (source(*TEXTS),)

@@ -1,5 +1,6 @@
 """An open library for machine-readable scientific markup.
 
-The package is a chain of stages over the artifact types in `atlas.contracts`:
-ingest, ontology loading, extraction. Each subpackage is one stage.
+The metamodel lives in `atlas.model`: sources, spans, nodes, links, assertions and
+the schema they are written under. It carries no vocabulary of its own -- an
+ontology is loaded under it, and each subpackage is one replaceable step over it.
 """

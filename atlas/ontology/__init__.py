@@ -1,9 +1,14 @@
-"""Loading, merging and validation of the ontology.
+"""Reading ontology packs off disk and merging them into one `Schema`.
 
-The ontology is data: a frozen core file plus an optional domain extension,
-hashed together into the version that every card carries. Validation returns a
-list of violations instead of raising, because a run scores the markup it got
-rather than aborting on the first bad card; only a broken ontology file raises.
+The core ships no vocabulary: `load()` with nothing to load is an empty schema, and
+every type a corpus uses arrives from a pack under `packs/`. This module is the only
+one that touches the filesystem; what the terms mean, and whether an object satisfies
+them, is `atlas.model.schema` and is not repeated here.
+
+The version is the hash of the bytes read, in the order they were given, so an object
+records the exact vocabulary it was written under and an edit to any pack moves it.
+A pack that declares prefixes is claiming identities, so each of its terms must carry
+an IRI, written out or as a CURIE that is expanded against that pack's own prefixes.
 """
 
 from __future__ import annotations
@@ -14,120 +19,80 @@ from pathlib import Path
 
 import yaml
 
-from atlas.contracts import Card, Edge, Ontology, PredicateDef, TypeDef
-
-CORE_PATH = Path(__file__).parent / "core.yaml"
+from atlas.model import FieldDef, PredicateDef, Schema, TypeDef
 
 
-def load(core_path: Path | None = None, extension_path: Path | None = None) -> Ontology:
-    """Read the core and an optional extension, merge them, hash the raw bytes."""
-    core_file = CORE_PATH if core_path is None else core_path
-    raw = core_file.read_bytes()
-    types, predicates = _parse(raw, core_file)
-
-    if extension_path is not None:
-        extension_bytes = extension_path.read_bytes()
-        extension_types, extension_predicates = _parse(extension_bytes, extension_path)
-        _check_parents(types, extension_types)
-        raw = raw + extension_bytes
-        types = types + extension_types
-        predicates = predicates + extension_predicates
-
+def load(*paths: Path | str) -> Schema:
+    """Merge the packs at these paths, in order, into one versioned schema."""
+    raw = b""
+    prefixes: dict[str, str] = {}
+    types: list[TypeDef] = []
+    predicates: list[PredicateDef] = []
+    for path in map(Path, paths):
+        body = path.read_bytes()
+        raw += body
+        pack = _parse(body, path)
+        prefixes |= pack.prefixes
+        types += pack.types
+        predicates += pack.predicates
     _reject_duplicates(t.name for t in types)
     _reject_duplicates(p.name for p in predicates)
-    version = hashlib.sha256(raw).hexdigest()[:12]
-    return Ontology(version=version, types=types, predicates=predicates)
+    schema = Schema(
+        version=hashlib.sha256(raw).hexdigest()[:12],
+        prefixes=prefixes,
+        types=tuple(types),
+        predicates=tuple(predicates),
+    )
+    _check_parents(schema)
+    return schema
 
 
-def validate_card(card: Card, ontology: Ontology) -> list[str]:
-    """List everything wrong with a card under this ontology; empty means valid."""
-    violations: list[str] = []
-    if ontology.find_type(card.type) is None:
-        violations.append(f"card {card.id}: unknown type {card.type!r}")
-    else:
-        declared = declared_fields(card.type, ontology)
-        for key in card.fields:
-            if key not in declared:
-                violations.append(
-                    f"card {card.id}: field {key!r} is not declared on type {card.type!r}"
-                )
-    # Card and Span already guarantee at least one span and non-empty span text, so
-    # the only provenance defect that can reach here is text that is all whitespace.
-    for span in card.spans:
-        if not span.text.strip():
-            violations.append(f"card {card.id}: blank span at {span.doc_id} page {span.page}")
-    return violations
-
-
-def declared_fields(name: str, ontology: Ontology) -> tuple[str, ...]:
-    """The fields a type declares, followed by the ones it inherits, without repeats."""
-    fields: list[str] = []
-    for type_def in _ancestry(name, ontology):
-        fields.extend(field for field in type_def.fields if field not in fields)
-    return tuple(fields)
-
-
-def validate_edge(edge: Edge, ontology: Ontology, src_type: str, dst_type: str) -> list[str]:
-    """List everything wrong with an edge, given the types of the cards it joins."""
-    predicate = ontology.find_predicate(edge.predicate)
-    if predicate is None:
-        return [f"edge {edge.src}->{edge.dst}: unknown predicate {edge.predicate!r}"]
-    violations: list[str] = []
-    if not _is_a(src_type, predicate.domain, ontology):
-        violations.append(
-            f"edge {edge.src}->{edge.dst}: predicate {predicate.name!r} "
-            f"expects domain {predicate.domain!r}, source is {src_type!r}"
-        )
-    if not _is_a(dst_type, predicate.range, ontology):
-        violations.append(
-            f"edge {edge.src}->{edge.dst}: predicate {predicate.name!r} "
-            f"expects range {predicate.range!r}, target is {dst_type!r}"
-        )
-    return violations
-
-
-def _parse(raw: bytes, path: Path) -> tuple[tuple[TypeDef, ...], tuple[PredicateDef, ...]]:
+def _parse(raw: bytes, path: Path) -> Schema:
     document = yaml.safe_load(raw) or {}
     if not isinstance(document, dict):
-        raise ValueError(f"{path}: ontology file must be a mapping")
-    types = tuple(TypeDef(**entry) for entry in document.get("types") or ())
-    predicates = tuple(PredicateDef(**entry) for entry in document.get("predicates") or ())
-    return types, predicates
+        raise ValueError(f"{path}: a pack must be a mapping")
+    # An unversioned schema over the pack's own prefixes: it is what knows how a CURIE
+    # expands, so the terms below are resolved against their own file, not the merge.
+    scope = Schema(version="", prefixes=document.get("prefixes") or {})
+    return scope.model_copy(
+        update={
+            "types": tuple(_type(entry, scope, path) for entry in document.get("types") or ()),
+            "predicates": tuple(
+                PredicateDef(**{**entry, "iri": _iri(entry, scope, path)})
+                for entry in document.get("predicates") or ()
+            ),
+        }
+    )
 
 
-def _check_parents(core: tuple[TypeDef, ...], extension: tuple[TypeDef, ...]) -> None:
-    # A parent must already be known when its child is read. That forbids forward
-    # references, and with them cycles, so the ancestor walks below terminate.
-    known = {t.name for t in core}
-    for type_def in extension:
-        if type_def.parent is None:
-            raise ValueError(f"extension type {type_def.name!r} must declare a parent")
-        if type_def.parent not in known:
-            raise ValueError(
-                f"extension type {type_def.name!r} has unknown parent {type_def.parent!r}"
-            )
-        known.add(type_def.name)
+def _type(entry: dict, scope: Schema, path: Path) -> TypeDef:
+    fields = tuple(_field(field, scope) for field in entry.get("fields") or ())
+    return TypeDef(**{**entry, "iri": _iri(entry, scope, path), "fields": fields})
+
+
+def _field(entry: dict | str, scope: Schema) -> FieldDef:
+    """A field is a mapping, or bare name shorthand for one that declares nothing else."""
+    entry = {"name": entry} if isinstance(entry, str) else entry
+    iri = entry.get("iri")
+    return FieldDef(**{**entry, "iri": scope.expand(iri) if iri else None})
+
+
+def _iri(entry: dict, scope: Schema, path: Path) -> str | None:
+    iri = entry.get("iri")
+    if iri is None and scope.prefixes:
+        raise ValueError(f"{path}: term {entry.get('name')!r} declares no iri")
+    return scope.expand(iri) if iri else None
+
+
+def _check_parents(schema: Schema) -> None:
+    for type_def in schema.types:
+        if type_def.parent is not None and schema.find_type(type_def.parent) is None:
+            raise ValueError(f"type {type_def.name!r} has unknown parent {type_def.parent!r}")
 
 
 def _reject_duplicates(names: Iterable[str]) -> None:
     seen: set[str] = set()
     for name in names:
         if name in seen:
-            raise ValueError(f"duplicate ontology name {name!r}")
+            raise ValueError(f"duplicate name {name!r}")
         seen.add(name)
-
-
-def _ancestry(name: str, ontology: Ontology) -> list[TypeDef]:
-    chain: list[TypeDef] = []
-    seen: set[str] = set()
-    current = ontology.find_type(name)
-    # A hand-edited core file may declare a parent cycle, which nothing above checks.
-    while current is not None and current.name not in seen:
-        seen.add(current.name)
-        chain.append(current)
-        current = ontology.find_type(current.parent) if current.parent else None
-    return chain
-
-
-def _is_a(name: str, expected: str, ontology: Ontology) -> bool:
-    return any(t.name == expected for t in _ancestry(name, ontology))
