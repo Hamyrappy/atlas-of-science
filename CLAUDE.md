@@ -35,17 +35,20 @@ atlas/ontology/        reading packs off disk and merging them into one Schema
 atlas/store/           the append-only write path and the projections read back out of it
 atlas/steps/           one module per replaceable step, each registered under a name
 atlas/pipeline.py      a configuration of step names run in order over one dict of state
+atlas/text.py          folding, normalising and tokenising; one ruling on what a dash is
 atlas/scaffold.py      the project skeleton `atlas init` writes
 atlas/llm.py           one chat client with a disk cache in front of it
 atlas/cli.py           argument parsing and file IO; no logic lives here
-packs/                 ontology packs; data, not package data, and not shipped in the wheel
+packs/                 ontology packs; data the wheel ships, reached through `ontology.builtin`
 docs/                  architecture, ontology, evaluation contract
 tests/                 one file per module; fixtures are generated, never committed as binaries
 ```
 
 A step is a function from the state of a run plus its configured options to the keys it adds to that state. It does not know about a database, a web server or a queue: the store is handed to it. Storage and IO live at the edge.
 
-Adding a step: write the function in its own module under `atlas/steps/`, decorate it with `@register("name")`, import the module in `atlas/steps/__init__.py`, add `tests/test_<step>.py`. Nothing else changes, and a configuration that does not name it does not run it. If a type crosses a step boundary, it belongs in `atlas/model/` — that rule is what lets two people work without meeting.
+Adding a step: write the function in its own module under `atlas/steps/`, decorate it with `@register("name", requires=(...), produces=(...))` naming the state keys it reads and adds, import the module in `atlas/steps/__init__.py`, add `tests/test_<step>.py`. Nothing else changes, and a configuration that does not name it does not run it. A step outside this tree is named under `imports:` in the configuration instead of being imported here.
+
+A type that crosses a step boundary lives **with the step that defines it**, and importing it from another step is normal — `Statement` in `relocate.py`, `Hit` in `retrieve.py`. `atlas/model/` holds only what the substrate is made of: what a store persists and what every run exchanges whichever steps are configured. The test is mechanical: is it asserted, does it carry a `schema_version`, does it outlive the state dict? `Run` answers yes to the first and is in `atlas/model/`; `Hit` answers no to all three. The other rule — everything inter-step into the metamodel — would pull every future step's intermediate into the six concepts, which is what this section exists to prevent.
 
 ## Commands
 
@@ -98,7 +101,7 @@ Direction, so that today's code leaves room for it rather than being redone:
 - **Identity.** Every type, predicate and domain term carries an IRI and mappings to public vocabularies. This is the one thing that cannot be retrofitted cheaply: a label is not an identity. The loader enforces it on any pack that declares prefixes.
 - **Schema artifacts.** The pack is authored once and SHACL, OWL and JSON Schema are generated from it. SHACL validates nodes; a reasoner runs in CI over the schema only, never over extracted data, where an open-world inference would invent the missing spans it is supposed to reject.
 - **Storage.** A third store, in PostgreSQL: JSONB for fields that are still moving, full text and vectors in the same engine, and the projections of `atlas/store/__init__.py` pushed into queries. RDF and a SPARQL endpoint are a published projection of it, not the working store.
-- **Steps not yet written.** Link extraction; canonicalisation of nodes across sources; hybrid retrieval; an answering agent that descends topic to node to exact place; an evaluation harness driven by competency questions with a dev/test split and corrupted negative controls that must drop the metric.
+- **Steps not yet written.** Link extraction; canonicalisation of nodes across sources; an evaluation harness driven by competency questions with a dev/test split and corrupted negative controls that must drop the metric. Retrieval and answering ship in their mechanical form only — one inverted index, term overlap, and the rule that an uncited line is dropped — so hybrid ranking and an agent that descends topic to node to exact place are still ahead. They go in as steps of their own, named in a configuration in place of `retrieve`, reusing the public `Index` and `overlap`; the seam is the step registry and there is deliberately no second one inside the step.
 
 ## What not to do
 

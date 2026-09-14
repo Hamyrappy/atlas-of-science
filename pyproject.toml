@@ -29,6 +29,11 @@ atlas = "atlas.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["atlas"]
 
+# The packs travel with the library: installing it gives you a vocabulary to start
+# from, and `atlas.ontology.builtin` finds it in the wheel and in a checkout alike.
+[tool.hatch.build.targets.wheel.force-include]
+"packs" = "atlas/packs"
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"

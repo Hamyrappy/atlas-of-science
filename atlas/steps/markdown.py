@@ -22,14 +22,14 @@ _FRONT_MATTER = re.compile(r"\A---\n(.*?)\n---\n\n", re.DOTALL)
 _MARKER = re.compile(r"^<!-- segment (\d+) -->\n", re.MULTILINE)
 
 
-@register("render_markdown")
+@register("render_markdown", requires=("sources",), produces=("renderings",))
 def render_markdown(state: State, *, out: str) -> State:
     """Write the rendering of every source of the run into one directory."""
     directory = Path(out)
     return {"renderings": tuple(write_markdown(s, directory) for s in state["sources"])}
 
 
-@register("ingest_markdown")
+@register("ingest_markdown", requires=("inputs",), produces=("sources",))
 def ingest_markdown(state: State) -> State:
     """Read every input of the run as a rendering written by `write_markdown`."""
     return {"sources": tuple(read_markdown(Path(path)) for path in state["inputs"])}

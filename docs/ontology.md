@@ -27,6 +27,7 @@ types:
     iri: obs:Observation
     description: Something recorded as having happened, at a place and a time.
     fields: [subject, value]
+    label_field: subject
 
   - name: SpectralObservation
     iri: obs:SpectralObservation
@@ -51,10 +52,25 @@ predicates:
 ```
 
 A field is a bare name, or a mapping declaring `datatype` and `iri`; that shorthand is the only
-sugar in the loader. `description` is what the extractor is shown, so it is written for a reader
+sugar in the loader. `label_field` names the field that names the thing, which is what
+`Schema.label_of(node)` shows a reader and what an interface prints on a card; a type that omits it
+is shown by the first field it declares, and a child inherits its parent's choice. Field order is
+then an ordering and nothing more: nothing else in the library reads meaning into it.
+`description` is what the extractor is shown, so it is written for a reader
 who has never seen the pack. `mappings` are identities in somebody else's vocabulary and are
 stored verbatim, never expanded: guessing what a foreign CURIE means against a local prefix map
 would be the same guess made twice.
+
+## Where a pack is found
+
+`load(*specs, base=None)` resolves each spec through `atlas.ontology.resolve`, which looks beside
+the file that named the pack (`base`, the directory of the configuration), then under the working
+directory, and finally among the packs shipped with the library. So several configurations in a
+subdirectory can share one pack at the root of a corpus without `../` in every one of them, and a
+configuration that says `schema: ml_paper` gets `atlas.ontology.builtin("ml_paper")`, the pack that
+travels inside the wheel. `builtin(name)` returns its path, to copy, to load, or to start a pack of
+your own from; a consumer's own packs should be package data in the same way, or `pip install` will
+give it a loader and no vocabulary.
 
 ## Identity, not labels
 

@@ -44,6 +44,27 @@ class Node(Evidenced):
     type: str = Field(description="An IRI or a CURIE naming a type of the loaded schema")
     fields: dict[str, str] = Field(default_factory=dict)
 
+    @property
+    def ref(self) -> str:
+        """A short name a reader can be shown and an answer can cite.
+
+        `id` is a content hash: too long for prose and meaningless to a person, while
+        a number minted over the current projection renumbers every node the next time
+        a corpus is marked up. This is derived from the node alone -- the source it was
+        read from and a stub of its own hash -- so the same claim on the same quote
+        carries the same reference in every run, and a citation stays true.
+        """
+        return f"{self.spans[0].source_id}#{self.id[:6]}"
+
+    def text(self) -> str:
+        """Everything about this node that is worth matching text against.
+
+        What was claimed and what the claim stands on: the field values, then the
+        quotes. Indexing, ranking and prompting all want exactly this, and wrote it
+        out separately until they disagreed.
+        """
+        return "\n".join([*self.fields.values(), *(span.text for span in self.spans)])
+
 
 class Link(Evidenced):
     """A typed relation between two nodes, an object in its own right."""

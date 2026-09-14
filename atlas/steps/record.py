@@ -5,6 +5,11 @@ pass over the same source lands under the judgements already recorded instead of
 erasing them, and the store projects whichever assertion is currently live. Assertion
 ids follow from their content, so replaying an unchanged pass at the same time writes
 the assertion it wrote before rather than a second copy of it.
+
+The schema of the run is kept alongside, because every object written here names its
+version and a reader a year from now has nothing to resolve that name against otherwise.
+The store is whatever the run carries; a run configured with none gets one in memory,
+opened by name like any other, so nothing here depends on a particular implementation.
 """
 
 from __future__ import annotations
@@ -13,17 +18,19 @@ import hashlib
 
 from atlas.model import Agent, Assertion
 from atlas.steps import State, register
-from atlas.store.memory import MemoryStore
+from atlas.store import open_store
 
 
-@register("assert")
+@register("assert", requires=("sources", "nodes", "schema", "at", "store"),
+          produces=("store", "assertions", "agent"))
 def record(state: State, *, agent: str = "run", label: str = "") -> State:
     """Assert every node of the run, into the store it carries or into a new one in memory."""
-    store = state.get("store") or MemoryStore()
+    store = state.get("store") or open_store("memory")
     at: str = state["at"]
     # A run is identified by the moment it ran; a person or a model by the label they are
     # known under, so that two passes by the same reviewer share one agent id.
     actor = Agent(id=label or f"{agent}:{at}", kind=agent, label=label)
+    store.add_schema(state["schema"])
     for source in state["sources"]:
         store.add_source(source)
     assertions = tuple(
@@ -32,7 +39,8 @@ def record(state: State, *, agent: str = "run", label: str = "") -> State:
     )
     for assertion in assertions:
         store.assert_(assertion)
-    return {"store": store, "assertions": assertions}
+    # The agent travels on: the record of the pass names its author, and only this step knows it.
+    return {"store": store, "assertions": assertions, "agent": actor.id}
 
 
 def _assertion_id(agent_id: str, at: str, target_id: str) -> str:

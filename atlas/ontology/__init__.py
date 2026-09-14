@@ -1,9 +1,11 @@
 """Reading ontology packs off disk and merging them into one `Schema`.
 
-The core ships no vocabulary: `load()` with nothing to load is an empty schema, and
-every type a corpus uses arrives from a pack under `packs/`. This module is the only
-one that touches the filesystem; what the terms mean, and whether an object satisfies
-them, is `atlas.model.schema` and is not repeated here.
+The core names no vocabulary: `load()` with nothing to load is an empty schema, and
+every type a corpus uses arrives from a pack. The packs under `packs/` are shipped
+with the library as data to start from, found through `builtin` whether the library
+is a checkout or a wheel. This module is the only one that touches the filesystem;
+what the terms mean, and whether an object satisfies them, is `atlas.model.schema`
+and is not repeated here.
 
 The version is the hash of the bytes read, in the order they were given, so an object
 records the exact vocabulary it was written under and an edit to any pack moves it.
@@ -21,14 +23,50 @@ import yaml
 
 from atlas.model import FieldDef, PredicateDef, Schema, TypeDef
 
+SHIPPED = (Path(__file__).parents[1] / "packs", Path(__file__).parents[2] / "packs")
+"""Where the packs that travel with the library are: inside the installed package,
+and beside it in a checkout. A consumer starting from one of them should not have to
+know which of the two it is running from."""
 
-def load(*paths: Path | str) -> Schema:
-    """Merge the packs at these paths, in order, into one versioned schema."""
+
+def builtin(name: str) -> Path:
+    """The path of a pack shipped with the library, named without its suffix."""
+    for path in (root / f"{name}.yaml" for root in SHIPPED):
+        if path.is_file():
+            return path
+    raise FileNotFoundError(f"no pack {name!r} ships with the library")
+
+
+def resolve(spec: Path | str, base: Path | None = None) -> Path:
+    """Where the pack a configuration named is.
+
+    Beside the file that named it, then under the working directory, then among the
+    packs shipped with the library -- so several configurations in a subdirectory can
+    share one pack at the root of a corpus without writing `../` into every one of
+    them, and `schema: ml_paper` needs no path at all.
+    """
+    spec = Path(spec)
+    looked = [base / spec] if base is not None and not spec.is_absolute() else []
+    looked.append(spec)
+    for candidate in looked:
+        if candidate.is_file():
+            return candidate
+    if spec.parent == Path("."):
+        return builtin(spec.stem)
+    raise FileNotFoundError(f"no pack at {' or '.join(str(c) for c in looked)}")
+
+
+def load(*specs: Path | str, base: Path | None = None) -> Schema:
+    """Merge the packs these specs name, in order, into one versioned schema.
+
+    Each spec is resolved by `resolve` against `base`, which is the directory of the
+    configuration that named them when there is one.
+    """
     raw = b""
     prefixes: dict[str, str] = {}
     types: list[TypeDef] = []
     predicates: list[PredicateDef] = []
-    for path in map(Path, paths):
+    for path in (resolve(spec, base) for spec in specs):
         body = path.read_bytes()
         raw += body
         pack = _parse(body, path)

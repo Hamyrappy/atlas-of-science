@@ -35,6 +35,7 @@ class TypeDef(Frozen):
     iri: str | None = None
     parent: str | None = None
     fields: tuple[FieldDef, ...] = ()
+    label_field: str | None = None  # which of the fields names the thing, for a reader
     mappings: tuple[str, ...] = ()
     description: str = ""
 
@@ -95,6 +96,20 @@ class Schema(Frozen):
                     taken.add(field.name)
                     fields.append(field)
         return tuple(fields)
+
+    def label_of(self, node: Node) -> str:
+        """What to call this node in front of a person.
+
+        The type says which of its fields names the thing; one that does not say falls
+        back to the first field it declares, and a node that filled in neither falls
+        back to its type. Never the id, which is a content hash.
+        """
+        labelled = next((t for t in self.ancestry(node.type) if t.label_field), None)
+        preferred = [labelled.label_field] if labelled else []
+        for name in preferred + [f.name for f in self.declared_fields(node.type)]:
+            if node.fields.get(name):
+                return node.fields[name]
+        return node.type
 
     def validate_node(self, node: Node) -> list[str]:
         """Everything wrong with a node under this schema; empty means valid."""

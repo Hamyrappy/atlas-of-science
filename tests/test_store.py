@@ -2,7 +2,9 @@
 
 What is under test is the semantics, not the medium -- a read returns the current
 claim, a write never destroys the claim it replaces -- so the fixture is
-parametrised and every test but the one about reopening a file is medium-blind.
+parametrised and most tests are medium-blind. The ones that are not say what they are
+about: reopening a file, and the cached projection the file store reads through, which
+is the only place where a read that is cheap could also be wrong.
 """
 
 from __future__ import annotations
@@ -12,8 +14,8 @@ from pathlib import Path
 
 import pytest
 
-from atlas.model import Agent, Assertion, Link, Node, Segment, Source, Span
-from atlas.store import Store
+from atlas.model import Agent, Assertion, Link, Node, Run, Schema, Segment, Source, Span, TypeDef
+from atlas.store import Store, jsonl, open_store
 from atlas.store.jsonl import JsonlStore
 from atlas.store.memory import MemoryStore
 
@@ -132,3 +134,114 @@ def test_reopening_a_jsonl_store_recovers_the_same_projection(tmp_path: Path) ->
     assert reopened.nodes() == written.nodes()
     assert reopened.assertions() == written.assertions()
     assert (tmp_path / "atlas" / "assertions.jsonl").read_text(encoding="utf-8").count("\n") == 2
+
+
+def test_a_store_lists_the_sources_it_holds(store: Store) -> None:
+    other = SOURCE.model_copy(update={"id": "src-000000002"})
+    store.add_source(other)
+    store.add_source(SOURCE)
+
+    assert [s.id for s in store.sources()] == [SOURCE.id, other.id]
+
+
+def test_a_node_is_fetched_by_id_without_projecting_the_whole_graph(store: Store) -> None:
+    store.assert_(asserted("a-1", node("node-1", name="first"), at="2026-01-01T00:00:00Z"))
+    store.assert_(asserted("a-2", node("node-2", name="second"), at="2026-01-01T00:00:01Z"))
+
+    assert store.get_node("node-2").fields["name"] == "second"
+    assert store.get_node("node-9") is None
+    assert [n.id for n in store.get_nodes(["node-2", "node-9", "node-1"])] == ["node-2", "node-1"]
+    assert store.get_nodes(()) == ()
+
+
+def test_a_superseded_node_is_not_fetched_by_id(store: Store) -> None:
+    store.assert_(asserted("a-1", node(name="first"), at="2026-01-01T00:00:00Z"))
+    store.assert_(
+        asserted("a-2", node(name="second"), at="2026-01-02T00:00:00Z", supersedes="a-1")
+    )
+
+    assert store.get_node("node-1").fields["name"] == "second"
+
+
+def test_a_store_says_where_it_lives_and_where_an_artifact_may_go(store: Store) -> None:
+    if isinstance(store, MemoryStore):
+        assert store.location is None
+        assert store.artifact("index.json") is None
+    else:
+        assert store.location is not None
+        assert store.artifact("index.json") == store.location / "index.json"
+
+
+def test_runs_are_recorded_and_come_back_in_order(store: Store) -> None:
+    first = Run(id="run-1", at="2026-01-01T00:00:00Z", counts={"claimed": 9, "kept": 7})
+    second = Run(id="run-2", at="2026-01-02T00:00:00Z", pipeline="build.yaml", seconds=1.5)
+    store.add_run(first)
+    store.add_run(second)
+
+    assert store.runs() == (first, second)
+    assert store.runs()[0].counts["kept"] == 7
+
+
+def test_a_schema_version_resolves_back_to_the_schema_it_names(store: Store) -> None:
+    schema = Schema(version=VERSION, types=(TypeDef(name="Method"),))
+    store.add_schema(schema)
+    store.add_schema(schema)
+
+    assert store.get_schema(VERSION) == schema
+    assert store.get_schema("unwritten") is None
+
+
+def test_the_jsonl_log_is_parsed_once_until_it_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = JsonlStore(tmp_path / "atlas")
+    store.add_source(SOURCE)
+    store.assert_(asserted("a-1", node(), at="2026-01-01T00:00:00Z"))
+    parses = 0
+    original = jsonl._read
+
+    def counted(*arguments: object, **options: object) -> tuple:
+        nonlocal parses
+        parses += 1
+        return original(*arguments, **options)
+
+    monkeypatch.setattr(jsonl, "_read", counted)
+
+    assert store.nodes() and store.get_node("node-1") and store.assertions()
+    assert store.links() == ()
+    assert parses == 1
+
+    store.assert_(asserted("a-2", node("node-2"), at="2026-01-01T00:00:01Z"))
+
+    assert len(store.nodes()) == 2
+    assert parses == 2
+
+
+def test_a_write_by_another_process_invalidates_the_cached_projection(tmp_path: Path) -> None:
+    reader = JsonlStore(tmp_path / "atlas")
+    reader.add_source(SOURCE)
+    reader.assert_(asserted("a-1", node(), at="2026-01-01T00:00:00Z"))
+    assert [n.id for n in reader.nodes()] == ["node-1"]
+
+    writer = JsonlStore(tmp_path / "atlas")
+    writer.add_source(SOURCE.model_copy(update={"id": "src-000000002"}))
+    writer.assert_(asserted("a-2", node("node-2"), at="2026-01-01T00:00:01Z"))
+
+    assert [n.id for n in reader.nodes()] == ["node-1", "node-2"]
+    assert len(reader.sources()) == 2
+
+
+def test_a_named_store_is_opened_from_a_specification(tmp_path: Path) -> None:
+    assert isinstance(open_store("memory"), MemoryStore)
+
+    opened = open_store({"jsonl": {"dir": "store"}}, base=tmp_path)
+
+    assert opened.location == tmp_path / "store"
+    assert open_store("jsonl", base=tmp_path).location == tmp_path / "store"
+
+
+def test_an_unknown_or_malformed_store_specification_is_refused(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="unknown store 'postgres'"):
+        open_store({"postgres": {"dsn": "..."}}, base=tmp_path)
+    with pytest.raises(ValueError, match="one name with its options"):
+        open_store({"jsonl": {}, "memory": {}})

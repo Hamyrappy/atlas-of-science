@@ -12,7 +12,7 @@ from atlas.model import Node, Schema
 from atlas.steps import State, register
 
 
-@register("validate")
+@register("validate", requires=("nodes", "schema"), produces=("nodes", "violations"))
 def validate(state: State) -> State:
     """Keep the nodes the schema accepts, and report everything it said about the rest."""
     schema: Schema = state["schema"]
