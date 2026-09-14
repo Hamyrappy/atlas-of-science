@@ -18,7 +18,12 @@ SCHEMA = Schema(
     version=VERSION,
     prefixes={"ex": "https://example.org/terms#"},
     types=(
-        TypeDef(name="Thing", iri="ex:Thing", fields=(FieldDef(name="name"),)),
+        TypeDef(
+            name="Thing",
+            iri="ex:Thing",
+            fields=(FieldDef(name="name"),),
+            label_field="name",
+        ),
         TypeDef(
             name="Measure",
             iri="https://example.org/terms#Measure",
@@ -145,3 +150,27 @@ def test_a_subtype_satisfies_the_domain_of_its_parent() -> None:
 def test_a_schema_refuses_an_undeclared_key() -> None:
     with pytest.raises(ValidationError):
         Schema(version=VERSION, namespace="ex:")
+
+
+def test_the_label_a_type_declares_beats_the_order_of_the_fields() -> None:
+    """A child inherits the declaration, so a measure is shown by its name and not by
+    the first field it happens to declare itself."""
+    measured = node("Measure", {"value": "0.912", "name": "F1 on the validation split"})
+
+    assert SCHEMA.label_of(measured) == "F1 on the validation split"
+
+
+def test_a_type_that_declares_no_label_is_shown_by_its_first_field() -> None:
+    schema = Schema(
+        version=VERSION,
+        types=(TypeDef(name="Note", fields=(FieldDef(name="body"), FieldDef(name="tag"))),),
+    )
+
+    shown = node("Note", {"tag": "late", "body": "what was said"})
+
+    assert schema.label_of(shown) == "what was said"
+
+
+def test_a_node_with_nothing_to_show_falls_back_to_its_type() -> None:
+    assert SCHEMA.label_of(node("Measure", {"name": ""})) == "Measure"
+    assert SCHEMA.label_of(node("Instrument", {"serial": "42"})) == "Instrument"

@@ -1,18 +1,31 @@
-"""A folded copy of a text that still maps back onto it, character by character.
+"""One place that decides what a dash, a quotation mark and a run of spaces are.
 
-Relaxing a search means searching something other than the text the offsets must come
-from, so every relaxation here folds a copy and keeps the source offset of each
-character it kept. That map is what lets a hit found on the folded copy come back as a
-span that re-slices to exactly its own text in the original.
+Two things fold text and they must not disagree: placing a quote in a source, which
+needs a folded copy that still maps back onto the original offsets, and indexing a
+node or a question, which needs comparable terms. When those were two private
+implementations, a quote located through one normalisation was indexed through
+another and a search missed a node whose span had been placed perfectly well.
+
+So `fold` is the foundation -- offset-preserving, used by relocation -- and
+`normalise` and `tokenise` are built on the same table above it. Nothing here
+touches a stored text layer: these produce copies, and `Source.segments[i].text`
+stays exactly as it was ingested.
 """
 
 from __future__ import annotations
+
+import re
+import unicodedata
 
 _FOLD = {
     **{ord(c): "-" for c in "‐‑‒–—―−"},
     **{ord(c): "'" for c in "‘’‚‛′´"},
     **{ord(c): '"' for c in "“”„‟″«»"},
 }
+
+_TERM = re.compile(r"\w+(?:[-']\w+)*")
+"""A term keeps the hyphen and the apostrophe inside it, which is the whole reason
+the folding table above is shared: "F-score", "F‑score" and "F–score" are one term."""
 
 
 def fold(text: str) -> tuple[str, tuple[int, ...]]:
@@ -37,6 +50,21 @@ def fold(text: str) -> tuple[str, tuple[int, ...]]:
         characters.append(_FOLD.get(ord(character), character))
         offsets.append(index)
     return "".join(characters), tuple(offsets)
+
+
+def normalise(text: str) -> str:
+    """The comparable form of a text: compatibility forms, punctuation, case, whitespace.
+
+    The same table `fold` uses, so a folded copy and a normalised one differ only in
+    case and in compatibility forms -- never in what counts as one word.
+    """
+    folded, _ = fold(unicodedata.normalize("NFKC", text))
+    return folded.casefold()
+
+
+def tokenise(text: str) -> tuple[str, ...]:
+    """The terms of a text, normalised: what an index stores and a question is cut into."""
+    return tuple(_TERM.findall(normalise(text)))
 
 
 def to_original(offsets: tuple[int, ...], start: int, end: int) -> tuple[int, int]:

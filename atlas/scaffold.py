@@ -5,10 +5,16 @@ questions the markup will be scored against, and a note saying what the three ar
 All four are data the owner of the corpus edits, so they are templates and not code,
 and the pack here declares one placeholder type: the library ships no vocabulary, and
 a skeleton that shipped six types would be shipping one.
+
+The four below are the default and not the mechanism: `scaffold` writes whatever
+mapping of relative name to text it is handed, so an application whose corpora have a
+shape of their own passes that shape in rather than reimplementing the command. A name
+may contain directories, which is the only layout rule there is.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 
 PACK = """\
@@ -39,6 +45,7 @@ PIPELINE = """\
 # registered under a name and written here; options live under the name they belong to.
 
 schema: pack.yaml
+store: {jsonl: {dir: store}}
 
 steps:
   - ingest_pdf
@@ -76,7 +83,7 @@ Run it:
 
 ```bash
 export ATLAS_BASE_URL=... ATLAS_MODEL=... ATLAS_API_KEY=...
-atlas run pipeline.yaml paper.pdf --store store/
+atlas run pipeline.yaml paper.pdf
 ```
 
 The store is append-only: a second run lands under what is already recorded rather
@@ -91,20 +98,23 @@ FILES = {
 }
 
 
-def scaffold(directory: Path | str) -> tuple[Path, ...]:
-    """Write the four files of a new project into a directory, and return their paths.
+def scaffold(directory: Path | str, templates: Mapping[str, str] | None = None) -> tuple[Path, ...]:
+    """Write a skeleton into a directory and return the paths written, in the order given.
 
-    A file already there is never overwritten: the directory of a running corpus is
-    the likeliest thing to be pointed at by mistake, and its pack is not replaceable.
+    `templates` maps a relative name to the text to write under it, and defaults to the
+    four files above. A file already there is never overwritten: the directory of a
+    running corpus is the likeliest thing to be pointed at by mistake, and its pack is
+    not replaceable.
     """
+    files = FILES if templates is None else templates
     directory = Path(directory)
-    directory.mkdir(parents=True, exist_ok=True)
-    taken = [name for name in FILES if (directory / name).exists()]
+    taken = [name for name in files if (directory / name).exists()]
     if taken:
         raise FileExistsError(f"{directory} already holds {', '.join(taken)}")
     written = []
-    for name, body in FILES.items():
+    for name, body in files.items():
         path = directory / name
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(body, encoding="utf-8")
         written.append(path)
     return tuple(written)

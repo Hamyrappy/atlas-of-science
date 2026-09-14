@@ -13,7 +13,7 @@ import pytest
 
 from atlas.cli import main
 from atlas.pipeline import Pipeline
-from atlas.scaffold import FILES
+from atlas.scaffold import FILES, scaffold
 from atlas.store.jsonl import JsonlStore
 
 MODEL_VARIABLES = ("ATLAS_BASE_URL", "ATLAS_MODEL", "ATLAS_API_KEY")
@@ -21,6 +21,7 @@ LINES = (
     ("Iron oxidises in damp air.", "The rate rises with temperature."),
     ("A coating of zinc delays the onset.",),
 )
+CONFIGURED_STORE = "store: {jsonl: {dir: written}}\n"
 PACK = """
 types:
   - name: Thing
@@ -66,11 +67,14 @@ def test_run_writes_the_nodes_of_the_run_into_the_store_it_names(
     code = main(["run", str(write_config(PACK, STEPS)), str(pdf), "--store", str(store)])
     printed = capsys.readouterr().out.splitlines()
 
-    nodes = JsonlStore(store).nodes()
+    reopened = JsonlStore(store)
     assert code == 0
-    assert [node.type for node in nodes] == ["Thing", "Thing"]
+    assert [node.type for node in reopened.nodes()] == ["Thing", "Thing"]
     assert len(printed) == 1
-    assert printed[0].split("\t")[-3:] == ["violations 0", "assertions 2", f"store {store}"]
+    fields = printed[0].split("\t")
+    assert fields[-3:-1] == ["assertions 2", f"store {store}"]
+    # The last field is what the store recorded the pass cost, which only it knows.
+    assert fields[-1] == f"{reopened.runs()[-1].seconds}s"
 
 
 @pytest.mark.usefixtures("model_environment")
@@ -129,6 +133,23 @@ def test_run_reports_a_configuration_it_cannot_use_on_one_line(
     assert expected in captured.err
 
 
+def test_run_refuses_an_option_no_step_takes_before_it_asks_for_a_key(
+    pdf: Path, tmp_path: Path, write_config: Callable[[str, str], Path],
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A file is wrong whether or not a key is exported, and that is the error to report."""
+    for variable in MODEL_VARIABLES:
+        monkeypatch.delenv(variable, raising=False)
+    steps = STEPS.replace("assert: {agent: run}", "assert: {agent: run, labl: me}")
+
+    code = main(["run", str(write_config(PACK, steps)), str(pdf), "--store", str(tmp_path)])
+    captured = capsys.readouterr()
+
+    assert code != 0
+    assert len(captured.err.splitlines()) == 1
+    assert "step 'assert': unknown option 'labl'" in captured.err
+
+
 def test_init_writes_a_project_and_prints_every_file(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -163,3 +184,44 @@ def test_the_project_init_writes_is_a_configuration_that_loads(tmp_path: Path) -
 
     assert pipeline.schema.type_names() == {"Thing"}
     assert len(pipeline.steps) == 6
+
+
+@pytest.mark.usefixtures("model_environment")
+def test_run_writes_into_the_store_the_configuration_names_when_no_directory_is_given(
+    pdf: Path, tmp_path: Path, write_config: Callable[[str, str], Path],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config = write_config(PACK, STEPS)
+    config.write_text(CONFIGURED_STORE + config.read_text(encoding="utf-8"), encoding="utf-8")
+
+    code = main(["run", str(config), str(pdf)])
+
+    assert code == 0
+    assert len(JsonlStore(tmp_path / "written").nodes()) == 2
+    assert f"store {tmp_path / 'written'}" in capsys.readouterr().out
+
+
+@pytest.mark.usefixtures("model_environment")
+def test_a_named_directory_overrides_the_store_the_configuration_names(
+    pdf: Path, tmp_path: Path, write_config: Callable[[str, str], Path],
+) -> None:
+    config = write_config(PACK, STEPS)
+    config.write_text(CONFIGURED_STORE + config.read_text(encoding="utf-8"), encoding="utf-8")
+
+    code = main(["run", str(config), str(pdf), "--store", str(tmp_path / "elsewhere")])
+
+    assert code == 0
+    assert len(JsonlStore(tmp_path / "elsewhere").nodes()) == 2
+    assert JsonlStore(tmp_path / "written").nodes() == ()
+
+
+def test_init_writes_the_templates_it_is_handed_instead_of_the_default_ones(
+    tmp_path: Path
+) -> None:
+    templates = {"corpus.yaml": "name: papers\n", "inputs/README.md": "Put the papers here.\n"}
+
+    written = scaffold(tmp_path / "papers", templates)
+
+    assert written == (tmp_path / "papers/corpus.yaml", tmp_path / "papers/inputs/README.md")
+    assert written[1].read_text(encoding="utf-8") == "Put the papers here.\n"
+    assert not (tmp_path / "papers/pack.yaml").exists()

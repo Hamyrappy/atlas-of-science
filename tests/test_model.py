@@ -10,7 +10,8 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from atlas.model import Agent, Assertion, Link, Node, Segment, Source, Span, current
+from atlas.model import Agent, Assertion, Link, Node, Schema, Segment, Source, Span, current
+from atlas.steps.relocate import Statement, relocate
 
 FIRST = "The task is to segment cells.\nWe introduce a model.\n"
 SECOND = "The model reached 0.912 on the held-out set.\n"
@@ -103,6 +104,61 @@ def test_a_node_is_a_frozen_value() -> None:
         node().type = "Task"
     with pytest.raises(ValidationError):
         node(author="a-reviewer")
+
+
+def test_a_node_offers_what_it_claimed_and_what_it_stands_on_as_one_text() -> None:
+    told = node(fields={"name": "a model", "summary": "trained on the benchmark"})
+
+    assert told.text() == "a model\ntrained on the benchmark\nsegment cells"
+    assert node().text() == "segment cells"
+
+
+def test_a_ref_is_short_cites_the_source_and_never_shows_the_hash_whole() -> None:
+    shown = node(id="0123456789abcdef")
+
+    assert shown.ref == "src-000000001#012345"
+    assert len(shown.ref) <= 40 and shown.id not in shown.ref
+    assert shown.ref == node(id="0123456789abcdef", schema_version="9" * 12).ref
+
+
+def extraction(*statements: Statement) -> tuple[Node, ...]:
+    """One markup run over SOURCE, through the step that mints the ids refs are cut from."""
+    state = {"sources": (SOURCE,), "schema": Schema(version="0" * 12), "statements": statements}
+    return relocate(state)["nodes"]
+
+
+def test_a_ref_survives_a_re_extraction() -> None:
+    """The property a citation depends on: what a saved answer points at is still there.
+
+    The second run finds one more thing and finds it first, which is exactly what moves
+    an ordinal minted over a projection and what must not move a ref.
+    """
+    kept = Statement(
+        source_id=SOURCE.id, segment=1, type="Method", fields={"name": "a model"},
+        quote="We introduce a model.",
+    )
+    found_later = Statement(
+        source_id=SOURCE.id, segment=2, type="Result", fields={"value": "0.912"},
+        quote="reached 0.912",
+    )
+
+    first = extraction(kept)
+    again = extraction(found_later, kept)
+
+    assert len(first) == 1 and len(again) == 2
+    assert {n.ref for n in first} <= {n.ref for n in again}
+    assert first[0].ref.startswith(f"{SOURCE.id}#")
+
+
+def test_two_nodes_of_one_source_are_cited_apart() -> None:
+    nodes = extraction(
+        Statement(source_id=SOURCE.id, segment=1, type="Task", fields={"name": "segmentation"},
+                  quote="The task is to segment cells."),
+        Statement(source_id=SOURCE.id, segment=1, type="Method", fields={"name": "a model"},
+                  quote="We introduce a model."),
+    )
+
+    assert len({n.ref for n in nodes}) == len(nodes) == 2
 
 
 def test_a_link_id_follows_from_what_it_relates_and_stands_on() -> None:

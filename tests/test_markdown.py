@@ -7,6 +7,7 @@ someone has edited since is refused rather than read.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -153,8 +154,27 @@ def test_an_edited_rendering_is_refused(tmp_path: Path) -> None:
 
 
 def test_the_two_steps_write_and_read_the_same_sources(tmp_path: Path) -> None:
-    written = get("render_markdown")({"sources": (source(*TEXTS),)}, out=str(tmp_path / "out"))
+    written = get("render_markdown")({"sources": (source(*TEXTS),)}, {"out": str(tmp_path / "out")})
 
     restored = get("ingest_markdown")({"inputs": written["renderings"]})
 
     assert restored["sources"] == (source(*TEXTS),)
+
+
+def test_a_rendering_with_nowhere_to_go_is_refused_when_the_file_is_read() -> None:
+    """`out` is required, so a configuration that forgot it is wrong on the page rather
+    than a TypeError raised after every source of the run has been read."""
+    with pytest.raises(ValueError, match=re.escape(
+        "step 'render_markdown': option 'out' is required. It takes out: str"
+    )):
+        get("render_markdown").configure(None)
+
+    with pytest.raises(ValueError, match=re.escape("unknown option 'dir'")):
+        get("render_markdown").configure({"dir": "renderings"})
+
+
+def test_reading_a_rendering_takes_no_options_and_refuses_the_one_writing_it_takes() -> None:
+    with pytest.raises(ValueError, match=re.escape(
+        "step 'ingest_markdown': unknown option 'out'. It takes no options"
+    )):
+        get("ingest_markdown").configure({"out": "renderings"})

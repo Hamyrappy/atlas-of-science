@@ -13,32 +13,38 @@ types:
     iri: ml:Task
     description: A problem being addressed, stated independently of any solution.
     fields: [name, definition]
+    label_field: name
 
   - name: Method
     iri: ml:Method
     description: A procedure, model or technique applied to a task.
     fields: [name, summary]
+    label_field: name
 
   - name: Dataset
     iri: ml:Dataset
     description: A body of data a method was applied to or evaluated on.
     mappings: [schema:Dataset, dcat:Dataset]
     fields: [name, description]
+    label_field: name
 
   - name: Metric
     iri: ml:Metric
     description: A quantity used to judge a result.
     fields: [name, unit]
+    label_field: name
 
   - name: Result
     iri: ml:Result
     description: A measured outcome, tied to the method, dataset and metric it came from.
     fields: [statement, value, conditions]
+    label_field: statement
 
   - name: Claim
     iri: ml:Claim
     description: An assertion about the world, which a result may support or contradict.
     fields: [statement, scope]
+    label_field: statement
 
 predicates:
   - name: addresses

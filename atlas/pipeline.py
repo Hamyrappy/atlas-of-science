@@ -8,79 +8,195 @@ module, and there is nothing here to subclass.
 
 The schema is loaded once, from the packs the configuration names, and every step sees
 it in the state: the pipeline is the seam where an ontology is plugged in.
+
+A run can be watched and entered part-way: `on_step` is called with the name each step
+was configured under, `initial` is public, and `run_state` runs the chain over a state
+the caller built, which is the shape a request has and a batch run has not.
+
+A configuration reserves four keys -- `schema`, `store`, `imports`, `steps` -- and every
+other key is the caller's, kept in `Pipeline.meta` and read by nothing here.
+
+The options written under a step's name are validated when the file is read, against the
+model that step declared it takes, so a misspelt or wrongly typed one is refused with the
+file and the step in the message rather than being swallowed.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+import hashlib
+import importlib
+import json
+import time
+from collections.abc import Callable, Iterable, Mapping, Sized
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from atlas.model import Schema
+from atlas.model import Frozen, Run, Schema
 from atlas.ontology import load
 from atlas.steps import State, Step, get
+from atlas.store import Store, open_store
+
+RESERVED = ("schema", "store", "imports", "steps")
+SEEDED = ("inputs", "schema", "at", "store")
+OnStep = Callable[[str, int, State, State], None]
 
 
 class Pipeline:
     """The steps one configuration names, and the schema they are all run under."""
 
-    def __init__(self, schema: Schema, steps: tuple[tuple[Step, dict], ...]) -> None:
+    def __init__(self, schema: Schema, steps: tuple[tuple[Step, Frozen], ...], *,
+                 store: Store | None = None, meta: Mapping[str, Any] | None = None,
+                 name: str = "") -> None:
         self.schema = schema
         self.steps = steps
+        self.store = store
+        self.meta: Mapping[str, Any] = dict(meta or {})
+        self.name = name
 
     @classmethod
     def from_config(cls, path: Path | str) -> Pipeline:
-        """Read a configuration: the packs to load, and the steps to run in order.
+        """Read a configuration: packs, store, imports, and the steps to run in order.
 
-        Pack paths are resolved against the directory of the configuration, so a
-        configuration and the vocabulary it names travel together.
+        Packs and the store are resolved against the directory of the configuration, so
+        it travels with what it names; `imports` is read before the step names are, which
+        is how a file names a step from a package of its own. The options under every
+        step name are validated here, against what that step declared, so a file that
+        misspells one is refused before a run starts rather than running without it.
         """
         path = Path(path)
         config = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        packs = config.get("schema") or ()
-        packs = [packs] if isinstance(packs, str) else packs
+        for module in _listed(config.get("imports")):
+            importlib.import_module(module)
+        steps = tuple(_step(path, entry) for entry in config.get("steps") or ())
+        _check_order(path, steps)
         return cls(
-            load(*(path.parent / pack for pack in packs)),
-            tuple(_step(entry) for entry in config.get("steps") or ()),
+            load(*_listed(config.get("schema")), base=path.parent),
+            steps,
+            store=open_store(config["store"], path.parent) if config.get("store") else None,
+            meta={key: value for key, value in config.items() if key not in RESERVED},
+            name=path.name,
         )
 
-    def run(self, inputs: Iterable[Path | str], **context: Any) -> State:
-        """Call every step in order over one state, and return what that state holds at the end.
-
-        A run is stamped once with the time it happened, which every assertion it
-        writes then carries; a backfill overrides it, as it does any other key.
+    def initial(self, inputs: Iterable[Path | str] = (), **context: Any) -> State:
+        """The state a run starts from: inputs, schema, the moment it happened, the store
+        the configuration named. Anything the caller passes wins, a backfilled `at` included.
         """
-        state: State = {
-            "inputs": tuple(inputs),
-            "schema": self.schema,
-            "at": datetime.now(UTC).isoformat(timespec="seconds"),
-            **context,
-        }
-        for step, options in self.steps:
-            state |= step(state, **options)
+        state: State = {"inputs": tuple(inputs), "schema": self.schema,
+                        "at": datetime.now(UTC).isoformat(timespec="seconds")}
+        if self.store is not None:
+            state["store"] = self.store
+        return state | context
+
+    def run(self, inputs: Iterable[Path | str], on_step: OnStep | None = None,
+            **context: Any) -> State:
+        """Run every step over a fresh state, record what the pass cost, return the state."""
+        started = time.monotonic()
+        state = self.run_state(self.initial(inputs, **context), on_step=on_step)
+        self._record(state, time.monotonic() - started)
         return state
+
+    def run_state(self, state: State, on_step: OnStep | None = None) -> State:
+        """Run every step over a state the caller built, and return what it holds at the end.
+
+        A question answered over a store is a run of the same chain with nothing to ingest.
+        """
+        for index, (step, options) in enumerate(self.steps):
+            produced = step(state, options)
+            state = state | produced
+            if on_step is not None:
+                on_step(step.name, index, produced, state)
+        return state
+
+    def _record(self, state: State, seconds: float) -> None:
+        """Hand the store a record of the pass, when the run had a store at all."""
+        store: Store | None = state.get("store")
+        if store is None:
+            return
+        counted = counts(state)
+        store.add_run(Run(
+            id=_run_id(self.name, state["at"], self.schema.version, counted),
+            at=state["at"],
+            pipeline=self.name,
+            schema_version=self.schema.version,
+            agent=str(state.get("agent") or ""),
+            counts=counted,
+            seconds=round(seconds, 3),
+        ))
+
+
+def counts(state: State) -> dict[str, int]:
+    """What a run left that can be counted: an int as it is, anything sized by its length.
+
+    Which counts exist is the configuration's business, so nothing here names a key, and a
+    step need not return an integer to be visible. Text is skipped: its length counts nothing.
+    """
+    counted = {}
+    for key, value in state.items():
+        if isinstance(value, bool | str | bytes):
+            continue
+        if isinstance(value, int):
+            counted[key] = value
+        elif isinstance(value, Sized):
+            counted[key] = len(value)
+    return counted
 
 
 def summary(state: State) -> str:
-    """Every count a run left in its state, as one line: a tuple by its length, an int as it is.
+    """Every count a run left in its state, as one line."""
+    return "\t".join(f"{key} {value}" for key, value in counts(state).items())
 
-    Which counts exist is the configuration's business, so nothing here names a key.
+
+def _step(path: Path, entry: str | dict) -> tuple[Step, Frozen]:
+    """One entry of the steps list: a bare name, or a name with its options under it.
+
+    The options are read into the model the step declared, so the file is what refuses a
+    misspelt or wrongly typed one, and the message says which file said it.
     """
-    return "\t".join(
-        f"{key} {value if isinstance(value, int) else len(value)}"
-        for key, value in state.items()
-        if isinstance(value, int | tuple)
-    )
-
-
-def _step(entry: str | dict) -> tuple[Step, dict]:
-    """One entry of the steps list: a bare name, or a name with its options under it."""
     if isinstance(entry, str):
-        return get(entry), {}
-    if len(entry) != 1:
+        name, options = entry, None
+    elif len(entry) != 1:
         raise ValueError(f"a step is one name with its options, not {sorted(entry)}")
-    [(name, options)] = entry.items()
-    return get(name), options or {}
+    else:
+        [(name, options)] = entry.items()
+    step = get(name)
+    try:
+        return step, step.configure(options)
+    except ValueError as invalid:
+        raise ValueError(f"{path}: {invalid}") from invalid
+
+
+def _check_order(path: Path, steps: tuple[tuple[Step, Frozen], ...]) -> None:
+    """Refuse a chain in which a step reads a key only a later step produces.
+
+    A key no step in the file produces belongs to the caller -- a client, a question -- and
+    passes; one produced further down is an ordering mistake, named here with the file
+    rather than left to become a `KeyError` inside a step.
+    """
+    available = set(SEEDED)
+    for index, (step, _options) in enumerate(steps):
+        for key in (name for name in step.requires if name not in available):
+            producer = next((s.name for s, _ in steps[index + 1:] if key in s.produces), None)
+            if producer is not None:
+                raise ValueError(f"{path}: step '{step.name}' reads '{key}', "
+                                 f"which '{producer}' produces after it")
+        available |= set(step.produces)
+
+
+def _listed(value: str | Iterable[str] | None) -> tuple[str, ...]:
+    """A configuration key that takes one name or several, always read as several."""
+    if not value:
+        return ()
+    return (value,) if isinstance(value, str) else tuple(value)
+
+
+def _run_id(*material: Any) -> str:
+    """A run is identified by what it is a record of, so a replay carries the id it carried before.
+
+    Nothing is deduplicated: the store appends, as it does with everything else, so two
+    identical passes are two rows under one id -- a history saying the pass was repeated,
+    which is not the same claim as saying the work was done twice.
+    """
+    return hashlib.sha256(json.dumps(material, sort_keys=True).encode()).hexdigest()[:16]

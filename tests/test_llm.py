@@ -3,20 +3,22 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import httpx
 import pytest
 
 from atlas import llm
-from atlas.llm import CacheMiss, Client, LLMError, ModelConfig
+from atlas.llm import CacheMiss, Client, LLMError, ModelConfig, Reply
 
 CONFIG = ModelConfig(base_url="https://example.test/v1", model="test-model", api_key="k")
 SCHEMA = {"type": "object", "properties": {"answer": {"type": "string"}}, "required": ["answer"]}
 
 
-def reply(text: str) -> dict:
-    return {"choices": [{"message": {"role": "assistant", "content": text}}]}
+def reply(text: str, **usage: int) -> dict:
+    body = {"choices": [{"message": {"role": "assistant", "content": text}}]}
+    return body | {"usage": usage} if usage else body
 
 
 def make_client(tmp_path: Path, *responses: httpx.Response) -> tuple[Client, list[httpx.Request]]:
@@ -34,17 +36,48 @@ def make_client(tmp_path: Path, *responses: httpx.Response) -> tuple[Client, lis
 
 def test_a_repeated_call_is_served_from_the_disk_cache(tmp_path: Path) -> None:
     client, seen = make_client(tmp_path, httpx.Response(200, json=reply("hello")))
-    assert client.complete("question") == "hello"
-    assert client.complete("question") == "hello"
+    assert client.complete("question").text == "hello"
+    assert client.complete("question").text == "hello"
     assert len(seen) == 1
     fresh, calls = make_client(tmp_path, httpx.Response(500, text="must not be called"))
-    assert fresh.complete("question") == "hello"
+    assert fresh.complete("question").text == "hello"
     assert calls == []
+
+
+def test_a_reply_carries_what_the_provider_counted_and_whether_it_was_paid_for(
+    tmp_path: Path,
+) -> None:
+    client, _ = make_client(
+        tmp_path, httpx.Response(200, json=reply("hello", prompt_tokens=11, completion_tokens=2))
+    )
+
+    first = client.complete("question")
+    again = client.complete("question")
+
+    assert (first.usage, first.cached) == ({"prompt_tokens": 11, "completion_tokens": 2}, False)
+    assert (again.usage, again.cached) == (first.usage, True)
+
+
+def test_a_provider_extra_under_usage_that_is_not_a_count_is_dropped(tmp_path: Path) -> None:
+    body = reply("hello", prompt_tokens=3)
+    body["usage"]["prompt_tokens_details"] = {"cached_tokens": 1}
+
+    client, _ = make_client(tmp_path, httpx.Response(200, json=body))
+
+    assert client.complete("question").usage == {"prompt_tokens": 3}
 
 
 def test_the_cache_directory_defaults_to_dot_atlas_cache() -> None:
     client = Client(CONFIG)
     assert client.cache_dir == Path(".atlas-cache")
+    client.close()
+
+
+def test_the_cache_directory_of_the_configuration_is_the_one_the_client_uses(
+    tmp_path: Path,
+) -> None:
+    client = Client(replace(CONFIG, cache_dir=tmp_path / "replies"))
+    assert client.cache_dir == tmp_path / "replies"
     client.close()
 
 
@@ -58,10 +91,11 @@ def test_a_different_system_prompt_is_a_different_cache_entry(tmp_path: Path) ->
 def test_cached_only_raises_on_a_miss(tmp_path: Path) -> None:
     client, seen = make_client(tmp_path, httpx.Response(200, json=reply("hello")))
     client.complete("question")
-    client.cached_only = True
-    assert client.complete("question") == "hello"
+    replay = Client(replace(CONFIG, cached_only=True), cache_dir=tmp_path / "cache")
+
+    assert replay.complete("question").text == "hello"
     with pytest.raises(CacheMiss):
-        client.complete("another question")
+        replay.complete("another question")
     assert len(seen) == 1
 
 
@@ -70,7 +104,7 @@ def test_rate_limit_is_retried(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     client, seen = make_client(
         tmp_path, httpx.Response(429, text="slow down"), httpx.Response(200, json=reply("hello"))
     )
-    assert client.complete("question") == "hello"
+    assert client.complete("question").text == "hello"
     assert len(seen) == 2
 
 
@@ -115,8 +149,11 @@ def test_schema_requests_strict_structured_output(tmp_path: Path) -> None:
 
 def test_complete_json_parses_a_fenced_reply(tmp_path: Path) -> None:
     fenced = 'Here it is:\n```json\n{"answer": "yes"}\n```\n'
-    client, _ = make_client(tmp_path, httpx.Response(200, json=reply(fenced)))
-    assert client.complete_json("question", SCHEMA) == {"answer": "yes"}
+    client, _ = make_client(tmp_path, httpx.Response(200, json=reply(fenced, total_tokens=7)))
+    body, answered = client.complete_json("question", SCHEMA)
+    assert body == {"answer": "yes"}
+    # The caller that spends the tokens is the one that reports them, so parsing keeps the reply.
+    assert (answered.tokens, answered.cached) == (7, False)
 
 
 def test_complete_json_retries_once_on_malformed_json(tmp_path: Path) -> None:
@@ -125,7 +162,7 @@ def test_complete_json_retries_once_on_malformed_json(tmp_path: Path) -> None:
         httpx.Response(200, json=reply("{not json at all")),
         httpx.Response(200, json=reply('{"answer": "yes"}')),
     )
-    assert client.complete_json("question", SCHEMA) == {"answer": "yes"}
+    assert client.complete_json("question", SCHEMA)[0] == {"answer": "yes"}
     assert len(seen) == 2
     assert "question" in json.loads(seen[1].content)["messages"][0]["content"]
 
@@ -149,3 +186,33 @@ def test_from_env_error_names_the_missing_variable(monkeypatch: pytest.MonkeyPat
     monkeypatch.delenv("ATLAS_MODEL", raising=False)
     with pytest.raises(LLMError, match="ATLAS_MODEL"):
         ModelConfig.from_env()
+
+
+def test_replay_from_the_environment_needs_no_key(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    for suffix, value in (("BASE_URL", "u"), ("MODEL", "m"), ("CACHED_ONLY", "yes")):
+        monkeypatch.setenv(f"ATLAS_{suffix}", value)
+    monkeypatch.setenv("ATLAS_CACHE_DIR", str(tmp_path))
+    monkeypatch.delenv("ATLAS_API_KEY", raising=False)
+
+    config = ModelConfig.from_env()
+
+    assert (config.cached_only, config.api_key, config.cache_dir) == (True, "", tmp_path)
+
+
+def test_a_key_is_still_required_when_replay_is_not_asked_for(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for suffix, value in (("BASE_URL", "u"), ("MODEL", "m"), ("CACHED_ONLY", "no")):
+        monkeypatch.setenv(f"ATLAS_{suffix}", value)
+    monkeypatch.delenv("ATLAS_API_KEY", raising=False)
+
+    with pytest.raises(LLMError, match="ATLAS_API_KEY"):
+        ModelConfig.from_env()
+
+
+def test_a_reply_totals_the_counts_a_provider_sends_under_whatever_name() -> None:
+    assert Reply(text="", usage={"total_tokens": 12}).tokens == 12
+    assert Reply(text="", usage={"prompt_tokens": 8, "completion_tokens": 4}).tokens == 12
+    assert Reply(text="").tokens == 0

@@ -2,7 +2,8 @@
 
 Every type here comes from a file the test names. The core ships none, so `load()`
 with no pack is the empty schema; the six machine-learning types live in
-`packs/ml_paper.yaml` like any other domain's and are loaded explicitly.
+`packs/ml_paper.yaml` like any other domain's and are loaded explicitly -- shipped
+with the library as data to start from, never as a vocabulary the core knows.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from atlas.model import Node, Span
-from atlas.ontology import load
+from atlas.ontology import builtin, load, resolve
 
 PACK = Path(__file__).parents[1] / "packs" / "ml_paper.yaml"
 NAMESPACE = "https://example.org/ontology/ml-paper#"
@@ -137,3 +138,30 @@ def test_a_pack_that_is_not_a_mapping_is_rejected(tmp_path: Path) -> None:
 def test_an_undeclared_key_in_a_pack_is_rejected(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="colour"):
         load(write(tmp_path, "types:\n  - name: Assay\n    colour: red\n"))
+
+
+def test_a_pack_shipped_with_the_library_is_found_by_name() -> None:
+    assert builtin("ml_paper") == PACK
+    assert load("ml_paper").version == load(PACK).version
+    with pytest.raises(FileNotFoundError, match="wildlife"):
+        builtin("wildlife")
+
+
+def test_a_pack_is_found_beside_the_file_that_named_it_or_from_the_working_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The layout a corpus wants: configurations in a subdirectory naming a pack that
+    is not beside them, and no `../` written into every one of them."""
+    pack = write(tmp_path, SECOND, "pack.yaml")
+    (tmp_path / "configs").mkdir()
+
+    assert resolve("pack.yaml", tmp_path) == pack
+    assert resolve(pack) == pack
+    monkeypatch.chdir(tmp_path)
+    assert resolve("pack.yaml", tmp_path / "configs") == Path("pack.yaml")
+    assert load(PACK, "pack.yaml", base=tmp_path / "configs").find_type("Assay") is not None
+
+
+def test_a_pack_that_is_nowhere_says_where_it_was_looked_for(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError, match="corpus/pack.yaml"):
+        resolve("corpus/pack.yaml", tmp_path)

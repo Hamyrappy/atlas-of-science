@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from pathlib import Path
 
@@ -86,3 +87,11 @@ def test_the_step_reads_every_input_of_the_run(
 
     assert [source.origin for source in state["sources"]] == [str(pdf_path), str(other)]
     assert len({source.id for source in state["sources"]}) == 2
+
+
+def test_the_step_takes_no_options_and_says_so_to_a_file_that_writes_one() -> None:
+    """Every choice here is the PDF's: a configuration writing one is refused as it is read."""
+    with pytest.raises(ValueError, match=re.escape(
+        "step 'ingest_pdf': unknown option 'pages'. It takes no options"
+    )):
+        get("ingest_pdf").configure({"pages": "1-4"})

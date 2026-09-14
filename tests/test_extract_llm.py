@@ -6,8 +6,20 @@ whichever schema it is given, so nothing it does may depend on what they are cal
 
 from __future__ import annotations
 
+import re
+
+import pytest
+
+from atlas.llm import Reply
 from atlas.model import FieldDef, Schema, Segment, Source, TypeDef
-from atlas.steps.extract_llm import PROMPT, STATEMENTS, build_schema, extract_llm
+from atlas.steps import get
+from atlas.steps.extract_llm import (
+    PROMPT,
+    STATEMENTS,
+    ExtractLlmOptions,
+    build_schema,
+    extract_llm,
+)
 
 FIRST = "1 Introduction\nA clean signal is hard to recover from noise.\n"
 SECOND = "2 Results\nThe error falls to 0.12, against 0.19 for the baseline.\n"
@@ -37,20 +49,30 @@ SCHEMA = Schema(
 
 
 class FakeClient:
-    """A client stub with the signature of `complete_json`, replaying canned replies."""
+    """A client stub with the signature of `complete_json`, replaying canned replies.
 
-    def __init__(self, *replies: list[dict]) -> None:
+    Every reply is charged for 10 tokens; the ones beyond `paid` come back marked cached,
+    which is how the step is asked to tell what a pass spent from what it spent earlier.
+    """
+
+    def __init__(self, *replies: list[dict], paid: int = 99) -> None:
         self.replies = [{STATEMENTS: reply} for reply in replies]
         self.prompts: list[str] = []
+        self.paid = paid
 
-    def complete_json(self, prompt: str, schema: dict, *, system: str | None = None) -> dict:
+    def complete_json(self, prompt: str, schema: dict, *,
+                      system: str | None = None) -> tuple[dict, Reply]:
         self.prompts.append(prompt)
-        return self.replies.pop(0) if self.replies else {STATEMENTS: []}
+        body = self.replies.pop(0) if self.replies else {STATEMENTS: []}
+        cached = len(self.prompts) > self.paid
+        return body, Reply(text="", usage={"total_tokens": 10}, cached=cached)
 
 
-def run(*replies: list[dict], **options: str) -> dict:
-    client = FakeClient(*replies)
-    state = extract_llm({"sources": (SOURCE,), "schema": SCHEMA, "client": client}, **options)
+def run(*replies: list[dict], paid: int = 99, **options: str) -> dict:
+    client = FakeClient(*replies, paid=paid)
+    state = extract_llm(
+        {"sources": (SOURCE,), "schema": SCHEMA, "client": client}, ExtractLlmOptions(**options)
+    )
     return state | {"client": client}
 
 
@@ -117,3 +139,24 @@ def test_the_reply_schema_offers_the_type_names_and_forbids_extra_keys() -> None
     assert set(item["properties"]["type"]["enum"]) == SCHEMA.type_names()
     assert item["required"] == ["type", "fields", "quote"]
     assert item["properties"]["fields"]["additionalProperties"] == {"type": "string"}
+
+
+def test_the_step_reports_what_it_spent_and_what_it_replayed() -> None:
+    state = run(paid=1)
+
+    # Two segments, so two calls; the second comes off the cache and is not charged again.
+    assert (state["tokens"], state["cached_replies"]) == (10, 1)
+
+
+def test_a_misspelt_option_is_refused_when_the_configuration_is_read() -> None:
+    """`segments` for `segment` used to be swallowed and the prompt ran on the default."""
+    with pytest.raises(ValueError, match=re.escape(
+        "step 'extract_llm': unknown option 'segments'. It takes segment: str = 'segment'"
+    )):
+        get("extract_llm").configure({"segments": "page"})
+
+
+def test_a_noun_with_no_word_in_it_is_refused() -> None:
+    """The prompt names the unit in four places; an empty name leaves four holes."""
+    with pytest.raises(ValueError, match=re.escape("step 'extract_llm': option 'segment':")):
+        get("extract_llm").configure({"segment": ""})

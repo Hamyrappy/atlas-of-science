@@ -8,6 +8,8 @@ stamps its version onto the nodes and asks it nothing else.
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from atlas.model import Schema, Segment, Source, Span
@@ -209,3 +211,11 @@ def test_two_statements_sharing_a_quote_both_survive(source: Source) -> None:
 
     assert len(state["nodes"]) == 2
     assert len({node.id for node in state["nodes"]}) == 2
+
+
+def test_the_threshold_is_a_constant_and_a_file_calling_it_an_option_is_refused() -> None:
+    """THRESHOLD is not configurable, so a configuration setting it is told, not ignored."""
+    with pytest.raises(ValueError, match=re.escape(
+        "step 'relocate': unknown option 'threshold'. It takes no options"
+    )):
+        get("relocate").configure({"threshold": THRESHOLD - 10})

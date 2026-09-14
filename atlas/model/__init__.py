@@ -12,15 +12,17 @@ so this is also the one place where a rename breaks unrelated code.
 
 from __future__ import annotations
 
-from atlas.model.assertion import Agent, Assertion, current
+from atlas.model.assertion import Agent, AgentKind, Assertion, current
 from atlas.model.base import SCHEMA_VERSION, Frozen
 from atlas.model.graph import Evidenced, Link, Node
+from atlas.model.run import Run
 from atlas.model.schema import FieldDef, PredicateDef, Schema, TypeDef
 from atlas.model.source import Segment, Source, Span
 
 __all__ = [
     "SCHEMA_VERSION",
     "Agent",
+    "AgentKind",
     "Assertion",
     "Evidenced",
     "FieldDef",
@@ -28,6 +30,7 @@ __all__ = [
     "Link",
     "Node",
     "PredicateDef",
+    "Run",
     "Schema",
     "Segment",
     "Source",

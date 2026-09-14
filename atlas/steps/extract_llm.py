@@ -7,20 +7,25 @@ model is asked for a verbatim quote and never for offsets, which `relocate` reco
 
 The noun a prompt uses for a segment is an option: a reader of PDFs calls them pages
 and a reader of transcripts calls them turns, while the metamodel calls neither.
+
+This is the step that spends the money, so it reports what it spent: `tokens` is what
+the provider counted for the calls that were actually made, and `cached_replies` how
+many came off the disk cache and cost nothing this time. Both are plain integers in the
+state, which is all the pipeline needs to total them over a pass.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from pydantic import ValidationError
+from pydantic import Field, ValidationError
 
-from atlas.model import Schema
+from atlas.model import Frozen, Schema
 from atlas.steps import State, register
 from atlas.steps.relocate import Statement
 
 if TYPE_CHECKING:
-    from atlas.llm import Client
+    from atlas.llm import ChatClient
 
 STATEMENTS = "statements"
 
@@ -41,25 +46,46 @@ Rules:
 """
 
 
-@register("extract_llm")
-def extract_llm(state: State, *, segment: str = "segment") -> State:
+class ExtractLlmOptions(Frozen):
+    """What a configuration may write under `extract_llm`: the noun its prompt uses.
+
+    Free text and not a choice, because the noun belongs to whatever was ingested --
+    pages, turns, slides -- and a list here would be domain content, which this package
+    does not hold. It must be a word: the prompt names the unit in four places, and an
+    empty one leaves four holes.
+    """
+
+    segment: str = Field(default="segment", min_length=1)
+
+
+@register("extract_llm", requires=("sources", "schema", "client"),
+          produces=("statements", "malformed", "tokens", "cached_replies"),
+          options=ExtractLlmOptions)
+def extract_llm(state: State, options: ExtractLlmOptions) -> State:
     """Call the model once per segment of every source, for statements nothing has placed yet."""
-    client: Client = state["client"]
+    client: ChatClient = state["client"]
     schema: Schema = state["schema"]
     reply_schema = build_schema(schema)
     catalogue = _catalogue(schema)
     statements: list[Statement] = []
     malformed = 0
+    tokens = 0
+    cached = 0
     for source in state["sources"]:
         for part in source.segments:
             prompt = PROMPT.format(
-                unit=segment, types=catalogue, number=part.number, text=part.text, key=STATEMENTS
+                unit=options.segment, types=catalogue, number=part.number,
+                text=part.text, key=STATEMENTS,
             )
-            reply = client.complete_json(prompt, reply_schema)
-            parsed, unreadable = _statements(reply, source.id, part.number)
+            body, reply = client.complete_json(prompt, reply_schema)
+            parsed, unreadable = _statements(body, source.id, part.number)
             statements += parsed
             malformed += unreadable
-    return {"statements": tuple(statements), "malformed": malformed}
+            # A cached reply was paid for in the run that first made the call, not in this one.
+            cached += int(reply.cached)
+            tokens += 0 if reply.cached else reply.tokens
+    return {"statements": tuple(statements), "malformed": malformed,
+            "tokens": tokens, "cached_replies": cached}
 
 
 def build_schema(schema: Schema) -> dict:
