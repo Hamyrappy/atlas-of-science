@@ -53,8 +53,10 @@ Six concepts, and nothing of any domain:
 ## Install
 
 ```bash
-pip install -e ".[dev]"
+pip install "atlas-of-science @ git+https://github.com/Hamyrappy/atlas-of-science.git@main"
 ```
+
+To work on the library itself, clone it and install in place: `pip install -e ".[dev]"`.
 
 A run talks to a chat-completions endpoint and reads three environment variables: `ATLAS_BASE_URL`
 (the base URL of the endpoint), `ATLAS_MODEL` (the model name sent with each request) and
@@ -92,6 +94,63 @@ that still holds them:
 ```yaml
 schema: packs/ml_paper.yaml
 ```
+
+## Use it as a library
+
+The command line is one caller among several. Everything it does is available as functions, so a
+project can take the parts it needs and write the rest itself.
+
+```python
+from pathlib import Path
+
+from atlas.model import Agent, Assertion, Node
+from atlas.ontology import load
+from atlas.steps.ingest_pdf import read_pdf
+from atlas.steps.relocate import locate
+from atlas.store.jsonl import JsonlStore
+
+schema = load(Path("pack.yaml"))
+source = read_pdf(Path("paper.pdf"))
+store = JsonlStore(Path("store"))
+store.add_source(source)
+
+match = locate(source, quote, segment)           # a quote becomes a verified span, or None
+node = Node(
+    id="n1",
+    type="Observation",                          # a type your pack declares, not one of ours
+    fields={"summary": quote[:40]},
+    spans=(match.span,),
+    schema_version=schema.version,
+)
+assert schema.validate_node(node) == []          # violations, empty when the node fits the pack
+
+store.assert_(
+    Assertion(
+        id="a1",
+        agent=Agent(id="me", kind="human", label="manual"),
+        at="2026-01-01T00:00:00+00:00",          # time is passed in, never read from the clock
+        target=node,
+    )
+)
+store.nodes()                                    # the projection: latest non-superseded per id
+```
+
+The three layers are independent. `atlas.model` is the metamodel and pulls in nothing else;
+`atlas.store` holds the append-only write path; `atlas.steps` are the batteries, each usable on its
+own. A project that only wants the provenance guarantees can import `Span`, `Node` and `locate` and
+ignore the rest.
+
+To run a whole configured pipeline instead, without the command line:
+
+```python
+from atlas.pipeline import Pipeline
+
+state = Pipeline.from_config("pipeline.yaml").run(["paper.pdf"], client=client, store=store)
+```
+
+Registering a step of your own needs no fork: write the function, decorate it with
+`@register("my_step")`, import the module once so the decorator runs, and name it in a
+configuration.
 
 ## Layout
 
