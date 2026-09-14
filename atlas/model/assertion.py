@@ -22,12 +22,16 @@ from pydantic import Field
 from atlas.model.base import Frozen
 from atlas.model.graph import Link, Node
 
+AgentKind = Literal["human", "model", "run"]
+"""What an assertion may be attributed to. Named, because a step whose configuration
+chooses one has to refuse the other spellings with the same three words in hand."""
+
 
 class Agent(Frozen):
     """Whoever an assertion is attributed to: a person, a model, or one run of one."""
 
     id: str
-    kind: Literal["human", "model", "run"]
+    kind: AgentKind
     label: str = ""
 
 

@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from rapidfuzz import fuzz
 
 from atlas.model import Frozen, Node, Segment, Source, Span
-from atlas.steps import State, register
+from atlas.steps import Nothing, State, register
 from atlas.text import fold, to_original, trim, whole_words
 
 THRESHOLD = 85.0
@@ -60,7 +60,7 @@ class _Searchable(NamedTuple):
 
 
 @register("relocate", requires=("sources", "statements", "schema"),
-          produces=("nodes", "unplaced", "needs_review"))
+          produces=("nodes", "unplaced", "needs_review"), options=Nothing)
 def relocate(state: State) -> State:
     """Place every statement in its source and mint a node for each one that lands."""
     sources = {source.id: source for source in state["sources"]}

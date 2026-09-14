@@ -14,7 +14,7 @@ import pytest
 from atlas.model import Agent, Assertion, Node, Segment, Source, Span
 from atlas.steps import get, register
 from atlas.steps.index_nodes import Index
-from atlas.steps.retrieve import Hit, overlap, retrieve
+from atlas.steps.retrieve import LIMIT, Hit, RetrieveOptions, overlap, retrieve
 from atlas.store.memory import MemoryStore
 
 SEGMENTS = (
@@ -63,7 +63,9 @@ def state_for(store: MemoryStore, question: str) -> dict:
 
 
 def test_the_relevant_node_ranks_first(store: MemoryStore) -> None:
-    hits = retrieve(state_for(store, "Какая точность на тестовой выборке?"))["hits"]
+    state = state_for(store, "Какая точность на тестовой выборке?")
+
+    hits = retrieve(state, RetrieveOptions())["hits"]
 
     assert isinstance(hits[0], Hit)
     assert hits[0].node.id == RESULT.id
@@ -72,20 +74,22 @@ def test_the_relevant_node_ranks_first(store: MemoryStore) -> None:
 
 def test_the_same_ranking_works_in_the_other_language(store: MemoryStore) -> None:
     """Nothing in the scoring is written per language: the terms come from the folding."""
-    hits = retrieve(state_for(store, "What F‑score did the pipeline reach?"))["hits"]
+    state = state_for(store, "What F‑score did the pipeline reach?")
+
+    hits = retrieve(state, RetrieveOptions())["hits"]
 
     assert hits[0].node.id == ENGLISH.id
 
 
 def test_a_question_sharing_no_term_retrieves_nothing(store: MemoryStore) -> None:
-    assert retrieve(state_for(store, "квантовая запутанность"))["hits"] == ()
+    assert retrieve(state_for(store, "квантовая запутанность"), RetrieveOptions())["hits"] == ()
 
 
 def test_the_limit_is_the_number_of_hits(store: MemoryStore) -> None:
     every = "модель точность f-score"
 
-    assert len(retrieve(state_for(store, every))["hits"]) == 3
-    assert len(retrieve(state_for(store, every), limit=1)["hits"]) == 1
+    assert len(retrieve(state_for(store, every), RetrieveOptions())["hits"]) == 3
+    assert len(retrieve(state_for(store, every), RetrieveOptions(limit=1))["hits"]) == 1
 
 
 def test_the_shorter_of_two_matching_nodes_wins() -> None:
@@ -103,7 +107,7 @@ def test_a_node_the_store_no_longer_projects_is_not_returned(store: MemoryStore)
     store.assert_(Assertion(id="a-9", agent=AGENT, at="2025-02-01T00:00:00+00:00",
                             target=corrected, supersedes="a-2"))
 
-    hits = retrieve(state)["hits"]
+    hits = retrieve(state, RetrieveOptions())["hits"]
 
     assert RESULT.id not in {hit.node.id for hit in hits}
 
@@ -127,8 +131,19 @@ def test_a_consumer_ranks_differently_by_naming_its_own_step(store: MemoryStore)
         [METHOD.id, RESULT.id, ENGLISH.id], reverse=True)
 
 
-def test_the_step_declares_what_it_reads_and_adds() -> None:
+def test_the_step_declares_what_it_reads_what_it_adds_and_what_it_takes() -> None:
     step = get("retrieve")
 
     assert step.requires == ("store", "index", "question")
     assert step.produces == ("hits",)
+    assert step.options is RetrieveOptions
+    assert RetrieveOptions().limit == LIMIT
+
+
+def test_a_step_called_through_the_registry_gets_the_defaults_its_model_carries(
+    store: MemoryStore
+) -> None:
+    """Nothing configured is not nothing given: the model is where the default lives."""
+    hits = get("retrieve")(state_for(store, "модель точность f-score"))["hits"]
+
+    assert len(hits) == 3

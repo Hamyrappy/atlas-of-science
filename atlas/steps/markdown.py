@@ -13,8 +13,10 @@ import json
 import re
 from pathlib import Path
 
-from atlas.model import Segment, Source
-from atlas.steps import State, register
+from pydantic import Field
+
+from atlas.model import Frozen, Segment, Source
+from atlas.steps import Nothing, State, register
 
 SEGMENT_MARKER = "<!-- segment {number} -->"
 
@@ -22,14 +24,28 @@ _FRONT_MATTER = re.compile(r"\A---\n(.*?)\n---\n\n", re.DOTALL)
 _MARKER = re.compile(r"^<!-- segment (\d+) -->\n", re.MULTILINE)
 
 
-@register("render_markdown", requires=("sources",), produces=("renderings",))
-def render_markdown(state: State, *, out: str) -> State:
+class RenderMarkdownOptions(Frozen):
+    """What a configuration may write under `render_markdown`: the directory to write into.
+
+    `out` has no default because there is no directory a library may pick on somebody's
+    behalf, and being required here is what turns a configuration that forgot it from a
+    `TypeError` raised after every source has been read into a refusal while the file is
+    open. The empty string is refused with it: `Path("")` is the working directory, so a
+    run would scatter renderings wherever it happened to be started from.
+    """
+
+    out: str = Field(min_length=1)
+
+
+@register("render_markdown", requires=("sources",), produces=("renderings",),
+          options=RenderMarkdownOptions)
+def render_markdown(state: State, options: RenderMarkdownOptions) -> State:
     """Write the rendering of every source of the run into one directory."""
-    directory = Path(out)
+    directory = Path(options.out)
     return {"renderings": tuple(write_markdown(s, directory) for s in state["sources"])}
 
 
-@register("ingest_markdown", requires=("inputs",), produces=("sources",))
+@register("ingest_markdown", requires=("inputs",), produces=("sources",), options=Nothing)
 def ingest_markdown(state: State) -> State:
     """Read every input of the run as a rendering written by `write_markdown`."""
     return {"sources": tuple(read_markdown(Path(path)) for path in state["inputs"])}

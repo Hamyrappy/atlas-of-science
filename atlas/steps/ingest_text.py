@@ -12,7 +12,9 @@ alters a character: the splits decide only where one segment ends and the next b
 How a file is cut is an option because segmentation is a cost decision and not a
 truth. Extraction is one model call per segment, so a blank line is usually the right
 unit, a short document is better whole, and a document with no blank lines at all
-needs a window to stop being one prompt.
+needs a window to stop being one prompt. The three names are the type of the option,
+so a configuration naming a fourth is refused when the file is read; `cut` keeps its
+own check for callers who reach it directly.
 """
 
 from __future__ import annotations
@@ -20,8 +22,11 @@ from __future__ import annotations
 import hashlib
 import re
 from pathlib import Path
+from typing import Literal
 
-from atlas.model import Segment, Source
+from pydantic import Field
+
+from atlas.model import Frozen, Segment, Source
 from atlas.steps import State, register
 
 _BREAK = re.compile(r"\n[ \t]*\n")
@@ -34,12 +39,27 @@ TITLE_CHARS = 120
 """How much of the first segment is kept as a title; a heading is short, a paragraph is not."""
 
 
-@register("ingest_text", requires=("inputs",), produces=("sources",))
-def ingest_text(state: State, *, split: str = "blank-line", window: int = WINDOW) -> State:
+class IngestTextOptions(Frozen):
+    """What a configuration may write under `ingest_text`, and where the step's defaults live.
+
+    The three cuts are written as the type, so a fourth name is refused while the file is
+    open and with all three named, instead of reaching the `ValueError` in `cut` several
+    steps into a run. A window is a budget in characters and none is not a budget: a
+    window of zero is refused here rather than quietly read as the one character `cut`
+    floors it at, which would cut a document into a segment per character.
+    """
+
+    split: Literal["blank-line", "whole", "window"] = "blank-line"
+    window: int = Field(default=WINDOW, gt=0)
+
+
+@register("ingest_text", requires=("inputs",), produces=("sources",), options=IngestTextOptions)
+def ingest_text(state: State, options: IngestTextOptions) -> State:
     """Read every input of the run as text encoded in UTF-8."""
     return {
         "sources": tuple(
-            read_text(Path(path), split=split, window=window) for path in state["inputs"]
+            read_text(Path(path), split=options.split, window=options.window)
+            for path in state["inputs"]
         )
     }
 

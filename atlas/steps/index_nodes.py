@@ -12,6 +12,10 @@ Two things are taken from the library rather than reinvented, and that is the po
 the module: the terms are `atlas.text.tokenise`'s, and the text of a node is
 `Node.text()`. An index that tokenised differently from the relocation that placed the
 spans would miss nodes whose evidence had been located perfectly well.
+
+The file is named by the configuration and placed by the store, and the declaration
+below keeps those two apart: the name is a file name, so a configuration cannot write
+the index outside the directory the store said a derived file may go in.
 """
 
 from __future__ import annotations
@@ -21,6 +25,8 @@ import json
 from collections import Counter
 from collections.abc import Iterable
 from pathlib import Path
+
+from pydantic import Field
 
 from atlas.model import Frozen, Node
 from atlas.steps import State, register
@@ -75,13 +81,27 @@ class Index(Frozen):
         return len(self.lengths)
 
 
-@register("index_nodes", requires=("store",), produces=("index",))
-def index_nodes(state: State, *, name: str = ARTIFACT, rebuild: bool = False) -> State:
+class IndexNodesOptions(Frozen):
+    """What the index file is called, and whether the one already there is trusted.
+
+    `name` is a file name and not a path: which directory a derived file may go in is the
+    store's answer, so a name carrying a separator -- `../index.json`, or an absolute one
+    -- is refused when the file is read rather than writing the index somewhere nothing
+    asked for. `rebuild` is the escape hatch for the one thing a signature cannot see: a
+    file whose contents were changed under a corpus that did not change.
+    """
+
+    name: str = Field(ARTIFACT, pattern=r"^[^/\\]+$")
+    rebuild: bool = False
+
+
+@register("index_nodes", requires=("store",), produces=("index",), options=IndexNodesOptions)
+def index_nodes(state: State, options: IndexNodesOptions) -> State:
     """Index the nodes of the store, reusing the artifact on disk while it still fits them."""
     store = state["store"]
     nodes = store.nodes()
-    path = store.artifact(name)
-    index = None if rebuild else _reusable(path, signature(nodes))
+    path = store.artifact(options.name)
+    index = None if options.rebuild else _reusable(path, signature(nodes))
     if index is None:
         index = Index.of(nodes)
         if path is not None:

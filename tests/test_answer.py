@@ -8,6 +8,12 @@ a rule with one caller is not a rule.
 
 from __future__ import annotations
 
+import re
+from collections.abc import Callable
+from pathlib import Path
+
+import pytest
+
 from atlas.llm import Reply
 from atlas.model import (
     Agent,
@@ -22,7 +28,7 @@ from atlas.model import (
 )
 from atlas.pipeline import Pipeline
 from atlas.steps import get
-from atlas.steps.answer import PROMPT, Answer, answer, evidence, keep_cited
+from atlas.steps.answer import PROMPT, Answer, AnswerOptions, answer, evidence, keep_cited
 from atlas.steps.retrieve import Hit
 from atlas.store.memory import MemoryStore
 
@@ -34,6 +40,13 @@ SCHEMA = Schema(
     types=(TypeDef(name="Thing", fields=(FieldDef(name="name"),), label_field="name"),),
 )
 QUESTION = "Какая точность распознавания?"
+DEFAULTS = AnswerOptions()
+PACK = """
+types:
+  - name: Thing
+    description: Anything the text names.
+    fields: [name]
+"""
 
 
 def node(node_id: str, quote: str, **fields: str) -> Node:
@@ -58,10 +71,12 @@ class StubClient:
     def __init__(self, text: str) -> None:
         self.reply = Reply(text=text, usage={"total_tokens": 41}, cached=True)
         self.prompts: list[str] = []
+        self.systems: list[str | None] = []
 
     def complete(self, prompt: str, *, schema: dict | None = None,
                  system: str | None = None) -> Reply:
         self.prompts.append(prompt)
+        self.systems.append(system)
         return self.reply
 
     def complete_json(self, prompt: str, schema: dict, *, system: str | None = None) -> dict:
@@ -79,7 +94,7 @@ def test_only_cited_statements_survive() -> None:
         "Есть и вторая оценка. [doc-1#ffffff]\n"
     )
 
-    state = answer(state_for(reply))
+    state = answer(state_for(reply), DEFAULTS)
 
     result: Answer = state["answer"]
     assert result.text == f"Точность распознавания составила 0,94. [{RESULT.ref}]"
@@ -91,14 +106,14 @@ def test_only_cited_statements_survive() -> None:
 def test_citations_keep_the_order_they_were_made_in() -> None:
     reply = f"База. [{BASELINE.ref}]\nТочность. [{RESULT.ref}][{BASELINE.ref}]\n"
 
-    result = answer(state_for(reply))["answer"]
+    result = answer(state_for(reply), DEFAULTS)["answer"]
 
     assert result.citations == (BASELINE.ref, RESULT.ref)
     assert result.hits[0].node.id == BASELINE.id
 
 
 def test_an_uncited_answer_is_an_empty_answer() -> None:
-    state = answer(state_for("Точность 0,94."))
+    state = answer(state_for("Точность 0,94."), DEFAULTS)
 
     assert state["answer"].text == ""
     assert state["answer"].citations == ()
@@ -108,7 +123,7 @@ def test_an_uncited_answer_is_an_empty_answer() -> None:
 def test_the_prompt_carries_the_question_the_references_and_the_quotes() -> None:
     state = state_for(f"Да. [{RESULT.ref}]")
 
-    answer(state)
+    answer(state, DEFAULTS)
 
     [prompt] = state["client"].prompts
     assert QUESTION in prompt
@@ -126,7 +141,7 @@ def test_the_evidence_names_a_node_by_its_label_and_not_by_its_id() -> None:
 
 
 def test_what_the_reply_cost_travels_with_the_answer() -> None:
-    result = answer(state_for(f"Да. [{RESULT.ref}]"))["answer"]
+    result = answer(state_for(f"Да. [{RESULT.ref}]"), DEFAULTS)["answer"]
 
     assert result.usage == {"total_tokens": 41}
     assert result.cached is True
@@ -151,6 +166,36 @@ def test_the_step_declares_what_it_reads_and_adds() -> None:
 
     assert step.requires == ("hits", "question", "client", "schema")
     assert step.produces == ("answer", "uncited")
+    assert step.options is AnswerOptions
+
+
+def test_the_system_prompt_a_run_configures_reaches_the_client() -> None:
+    state = state_for(f"Да. [{RESULT.ref}]")
+
+    answer(state, AnswerOptions(system="Отвечай коротко."))
+
+    assert state["client"].systems == ["Отвечай коротко."]
+
+
+def test_an_option_the_step_does_not_take_is_refused_when_the_file_is_read(
+    write_config: Callable[[str, str], Path]
+) -> None:
+    """`prompt` is the one a consumer reaches for, and the one the step does not offer."""
+    steps = "  - {answer: {prompt: Ответь на вопрос.}}\n"
+
+    with pytest.raises(ValueError, match=re.escape(
+        "step 'answer': unknown option 'prompt'. It takes system: str | None = None"
+    )):
+        Pipeline.from_config(write_config(PACK, steps))
+
+
+def test_a_system_prompt_written_and_left_empty_is_refused(
+    write_config: Callable[[str, str], Path]
+) -> None:
+    steps = '  - {answer: {system: ""}}\n'
+
+    with pytest.raises(ValueError, match=re.escape("step 'answer': option 'system':")):
+        Pipeline.from_config(write_config(PACK, steps))
 
 
 def test_a_node_carries_the_reference_it_is_cited_by() -> None:

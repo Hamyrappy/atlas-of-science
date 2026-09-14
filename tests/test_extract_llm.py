@@ -6,9 +6,20 @@ whichever schema it is given, so nothing it does may depend on what they are cal
 
 from __future__ import annotations
 
+import re
+
+import pytest
+
 from atlas.llm import Reply
 from atlas.model import FieldDef, Schema, Segment, Source, TypeDef
-from atlas.steps.extract_llm import PROMPT, STATEMENTS, build_schema, extract_llm
+from atlas.steps import get
+from atlas.steps.extract_llm import (
+    PROMPT,
+    STATEMENTS,
+    ExtractLlmOptions,
+    build_schema,
+    extract_llm,
+)
 
 FIRST = "1 Introduction\nA clean signal is hard to recover from noise.\n"
 SECOND = "2 Results\nThe error falls to 0.12, against 0.19 for the baseline.\n"
@@ -59,7 +70,9 @@ class FakeClient:
 
 def run(*replies: list[dict], paid: int = 99, **options: str) -> dict:
     client = FakeClient(*replies, paid=paid)
-    state = extract_llm({"sources": (SOURCE,), "schema": SCHEMA, "client": client}, **options)
+    state = extract_llm(
+        {"sources": (SOURCE,), "schema": SCHEMA, "client": client}, ExtractLlmOptions(**options)
+    )
     return state | {"client": client}
 
 
@@ -133,3 +146,17 @@ def test_the_step_reports_what_it_spent_and_what_it_replayed() -> None:
 
     # Two segments, so two calls; the second comes off the cache and is not charged again.
     assert (state["tokens"], state["cached_replies"]) == (10, 1)
+
+
+def test_a_misspelt_option_is_refused_when_the_configuration_is_read() -> None:
+    """`segments` for `segment` used to be swallowed and the prompt ran on the default."""
+    with pytest.raises(ValueError, match=re.escape(
+        "step 'extract_llm': unknown option 'segments'. It takes segment: str = 'segment'"
+    )):
+        get("extract_llm").configure({"segments": "page"})
+
+
+def test_a_noun_with_no_word_in_it_is_refused() -> None:
+    """The prompt names the unit in four places; an empty name leaves four holes."""
+    with pytest.raises(ValueError, match=re.escape("step 'extract_llm': option 'segment':")):
+        get("extract_llm").configure({"segment": ""})

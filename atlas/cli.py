@@ -5,8 +5,8 @@ Both subcommands are one library call -- `Pipeline.from_config(...).run(...)` an
 store included: `--store` overrides the one it names, and names nothing when it does not.
 Nothing here names a step or a type, and the one key of the state it reads is the store,
 to say where the pass went; the summary counts whatever the steps left behind. An expected
-failure, such as a missing file or an unset variable, is one line on stderr, since a
-traceback tells someone who mistyped a path nothing to act on.
+failure, such as a missing file, an option no step takes or an unset variable, is one line
+on stderr, since a traceback tells someone who mistyped a path nothing to act on.
 """
 
 from __future__ import annotations
@@ -56,14 +56,16 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _run(arguments: argparse.Namespace) -> int:
-    # The environment is read first so an unset variable fails before anything is written.
+    # The configuration is read first, because reading it needs neither a key nor an input:
+    # a step's misspelt option is then the error a run reports, instead of the unset
+    # variable the next line raises on a machine where nobody has exported one yet.
+    pipeline = Pipeline.from_config(arguments.config)
     client = Client(ModelConfig.from_env())
     context: dict = {"client": client}
     # Which store a run writes into is the configuration's, unless the command line names one.
     if arguments.store is not None:
         context["store"] = open_store({"jsonl": {"dir": str(arguments.store)}})
     try:
-        pipeline = Pipeline.from_config(arguments.config)
         state = pipeline.run(arguments.inputs, **context)
     finally:
         client.close()

@@ -180,6 +180,35 @@ Registering a step of your own needs no fork: write the function, decorate it wi
 declares are checked when the configuration is read, so a chain in the wrong order is refused by
 the file that holds it rather than by a `KeyError` inside a step.
 
+What a configuration may write under the name is declared the same way, as a model:
+
+```python
+from atlas.model import Frozen
+from atlas.steps import State, register
+
+
+class MyStepOptions(Frozen):
+    limit: int = 8
+
+
+@register("my_step", requires=("sources",), produces=("my_key",), options=MyStepOptions)
+def my_step(state: State, options: MyStepOptions) -> State:
+    return {"my_key": state["sources"][: options.limit]}
+```
+
+An option the model does not name, one missing, or one whose value is of the wrong type is refused
+while the configuration is being read, naming the file, the step and the fields it does know:
+
+```
+atlas: pipeline.yaml: step 'retrieve': unknown option 'treshold'. It takes limit: int = 8
+```
+
+A step that takes nothing declares `options=Nothing` (`from atlas.steps import Nothing`), which is
+also what a step registered without an `options=` gets, so every step refuses every option it does
+not name and none is ever swallowed. The default lives in the model and nowhere else, so the file
+and the function cannot disagree about it. `docs/architecture.md` lists what each shipped step
+takes.
+
 ## Layout
 
 ```

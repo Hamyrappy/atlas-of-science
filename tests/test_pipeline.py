@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from atlas.model import Frozen
 from atlas.pipeline import Pipeline, summary
 from atlas.steps import State, register
 from atlas.store.memory import MemoryStore
@@ -177,7 +178,11 @@ def test_the_configured_names_stay_on_the_pipeline(
     assert [step.name for step, _options in pipeline.steps] == [
         "ingest_pdf", "stub_extract", "relocate", "validate", "assert"
     ]
-    assert [options for _step, options in pipeline.steps][1] == {"types": {"Thing": "name"}}
+    # What the pipeline keeps is the model the step declared, not the mapping the file
+    # held: the file was validated as it was read, and its result is what the run uses.
+    configured = [options for _step, options in pipeline.steps][1]
+    assert isinstance(configured, Frozen)
+    assert configured.types == {"Thing": "name"}
 
 
 def test_the_initial_state_is_public_and_the_caller_overrides_any_of_it(

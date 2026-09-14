@@ -133,6 +133,23 @@ def test_run_reports_a_configuration_it_cannot_use_on_one_line(
     assert expected in captured.err
 
 
+def test_run_refuses_an_option_no_step_takes_before_it_asks_for_a_key(
+    pdf: Path, tmp_path: Path, write_config: Callable[[str, str], Path],
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A file is wrong whether or not a key is exported, and that is the error to report."""
+    for variable in MODEL_VARIABLES:
+        monkeypatch.delenv(variable, raising=False)
+    steps = STEPS.replace("assert: {agent: run}", "assert: {agent: run, labl: me}")
+
+    code = main(["run", str(write_config(PACK, steps)), str(pdf), "--store", str(tmp_path)])
+    captured = capsys.readouterr()
+
+    assert code != 0
+    assert len(captured.err.splitlines()) == 1
+    assert "step 'assert': unknown option 'labl'" in captured.err
+
+
 def test_init_writes_a_project_and_prints_every_file(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

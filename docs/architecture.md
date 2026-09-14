@@ -15,20 +15,71 @@ line in a configuration file, so the vocabulary of a corpus is chosen at run tim
 reading it. Each spec is resolved beside the configuration that named it, then under the working
 directory, then among the packs the wheel ships -- `docs/ontology.md` says where and why.
 
-The **pipeline** is a list of named steps. A step is a function `step(state, **options) -> State`,
-where `State` is `dict[str, Any]`: it receives everything the steps before it produced and returns
-the keys it adds. `atlas/steps/__init__.py` is a dict from name to `Step` -- the function, the name
-it was registered under, and the state keys it declares -- `atlas/pipeline.py` resolves the names in
-a configuration against it and calls them in order, and that is the entire mechanism. Adding a step
-is writing a function and registering it; replacing one is editing a line of YAML; neither is a
-reason to touch the pipeline or to fork the library.
+The **pipeline** is a list of named steps. A step is a function `step(state, options) -> State`,
+where `State` is `dict[str, Any]` and `options` is the model the step declared, absent when it
+declared none: it receives everything the steps before it produced and returns the keys it adds.
+`atlas/steps/__init__.py` is a dict from name to `Step` -- the function, the name it was registered
+under, the state keys it declares and the options it takes -- `atlas/pipeline.py` resolves the
+names in a configuration against it and calls them in order, and that is the entire mechanism.
+Adding a step is writing a function and registering it; replacing one is editing a line of YAML;
+neither is a reason to touch the pipeline or to fork the library.
 
-What a step reads and what it adds are declared where it is registered:
-`@register("retrieve", requires=("store", "index", "question"), produces=("hits",))`. `from_config` checks
-the chain as it reads the file: a step that reads a key a later step produces is refused by name,
-with the file in the message, instead of raising a `KeyError` from inside a step. A key no step in
-the file produces is the caller's to supply -- a client, a question -- and passes. That is the whole
-check: names of keys, in order, no types and no solver.
+What a step reads, what it adds and what it takes are declared where it is registered:
+
+```python
+class RetrieveOptions(Frozen):
+    limit: int = LIMIT
+
+
+@register("retrieve", requires=("store", "index", "question"), produces=("hits",),
+          options=RetrieveOptions)
+def retrieve(state: State, options: RetrieveOptions) -> State:
+```
+
+`from_config` checks the chain as it reads the file: a step that reads a key a later step produces
+is refused by name, with the file in the message, instead of raising a `KeyError` from inside a
+step. A key no step in the file produces is the caller's to supply -- a client, a question -- and
+passes. That is the whole check on state keys: names, in order, no types and no solver.
+
+The options are checked in the same pass and by the same rule -- refuse it while the file is open,
+name what is wrong. The model is the declaration and the parser at once, `Frozen` forbids what it
+does not name, and so a configuration reading `{retrieve: {limit: 8, treshold: 0.2}}` is refused
+with `step 'retrieve': unknown option 'treshold'. It takes limit: int = 8` and the path of the file
+in front of it, where before the misspelt key was swallowed and the step ran on its default. A
+wrongly typed value is the same class of mistake and gets the same treatment. A step that takes
+nothing declares `options=Nothing` -- which is also the default, so a step registered without an
+`options=` at all takes none and refuses every one written under its name -- and a default lives in
+the model and nowhere else, so the file and the signature cannot disagree. There is no path left
+that accepts an option nothing reads.
+
+### Why state keys are names and not types
+
+`requires` and `produces` could carry a type per key and be compared pairwise when the file is read
+-- `relocate` produces `nodes` as `tuple[Node, ...]`, `validate` reads them as the same -- and it
+was measured against what it would catch before it was left out.
+
+Against: of the eighteen keys the shipped steps exchange, seven are an `int` or a `str` whose name
+already says everything a type would (`tokens`, `malformed`, `cached_replies`, `uncited`,
+`assertions`, `at`, `question`); three carry an injected object (`store`, `client`, `schema`) and
+two of those are Protocols supplied by the caller rather than by a step, which a pairwise
+producer-to-consumer check never sees at all. What is left -- `sources`, `statements`, `nodes`,
+`index`, `hits`, `answer` -- is exchanged between steps that already share the import: `retrieve`
+imports `Index` from `index_nodes`, `answer` imports `Hit` from `retrieve`. The declaration would
+restate the import, and it is the import, not the restatement, that fails when the type changes.
+
+Against, harder: comparing `tuple[Hit, ...]` offered against `Iterable[Hit]` wanted is a subtype
+question, and answering it at run time is a solver. Demanding that both ends write the same
+annotation instead is a check on spelling. And a declaration is only as good as its author: nothing
+compares a declared type to what the function actually returns, so a wrong one is caught by nothing
+-- which is not hypothetical here, since `assert` declares `store` in `requires` and also produces
+it, meaning "use the one the run carries, or open one", a presence claim the declaration cannot
+express and enforcing it would break. Types on top of that would be built on sand.
+
+For: it would catch two steps agreeing on a name and disagreeing on the thing. That is real, and it
+is caught by the first run and by the test of either step, both of which are cheaper than a
+mechanism twelve modules have to be rewritten for. So: no types on state keys. The options half of
+the same problem pays -- an option is written by hand in a YAML file, by someone who cannot see the
+signature, and nothing else checks it -- and that half is implemented.
 
 Three things follow. A contributor can run any step on a laptop with no database and no services,
 because the state between two steps is a dict of models that serialise to files you can read,
@@ -38,11 +89,13 @@ on either side as long as the span still re-slices to its own text, and a differ
 a different `ingest_pdf`, not a change to extraction. Evaluation attaches at any seam, because a
 run's state is a value and a step is scored by replaying recorded inputs, with no hook inside it.
 
-Storage and IO live at the edge. The CLI in `atlas/cli.py` parses arguments, builds a client,
-calls `Pipeline.from_config(...).run(...)` and prints the counts the state carries, where the pass
-was written and what the store recorded it took; it names no step and no key. Which store a run
-writes into is the configuration's business, and `--store dir` overrides it with a directory of
-JSON lines for the one run. The model client in `atlas/llm.py` is an edge resource too, passed into a step
+Storage and IO live at the edge. The CLI in `atlas/cli.py` parses arguments, reads the
+configuration, builds a client, runs the chain and prints the counts the state carries, where the
+pass was written and what the store recorded it took; it names no step and no key. The
+configuration is read first because reading it needs no key: a step's misspelt option is then what
+a run reports, rather than an unset variable on a machine where nobody has exported one yet.
+Which store a run writes into is the configuration's business, and `--store dir` overrides it with
+a directory of JSON lines for the one run. The model client in `atlas/llm.py` is an edge resource too, passed into a step
 rather than reached for inside one. `Client.complete` returns a `Reply` -- the text, the usage the
 provider counted, and whether the disk cache answered -- so a caller can report what a run cost;
 `ATLAS_CACHED_ONLY` makes a client replay that cache with no key and no network. `complete_json`
@@ -88,6 +141,23 @@ recoverable from anything else in the state.
 | `retrieve` | `store`, `index`, `question` | `hits` | `atlas/steps/retrieve.py` |
 | `answer` | `hits`, `question`, `client`, `schema` | `answer`, `uncited` | `atlas/steps/answer.py` |
 
+What each may be given under its name in a configuration, copied from the message the library
+itself prints when an option is wrong -- anything not on this line is refused as the file is read:
+
+| Name | Options |
+|---|---|
+| `ingest_pdf` | no options |
+| `ingest_text` | `split: Literal['blank-line', 'whole', 'window'] = 'blank-line', window: int = 2000` |
+| `ingest_markdown` | no options |
+| `render_markdown` | `out: str` (required) |
+| `extract_llm` | `segment: str = 'segment'` |
+| `relocate` | no options |
+| `validate` | no options |
+| `assert` | `agent: Literal['human', 'model', 'run'] = 'run', label: str = ''` |
+| `index_nodes` | `name: str = 'index.json', rebuild: bool = False` |
+| `retrieve` | `limit: int = 8` |
+| `answer` | `system: str \| None = None` |
+
 The first eight are a build: documents in, assertions out. The last three are a question, and run
 over a store that a build filled earlier -- `Pipeline.run_state` with `question` and `client` in the
 state, no inputs and no timestamp to invent. `question` and `client` are produced by no step, which
@@ -122,6 +192,10 @@ differently -- and writes the postings to `store.artifact("index.json")`. A stor
 put a file answers `None` and the index is built per process instead. The file carries a signature
 over the node ids it was built from, so a corpus that gained or re-extracted a node gets a new index
 and one that did not gets the file already on disk; a truncated file is a miss, not a failed run.
+`rebuild` forces the build for the one thing a signature cannot see, a file edited under a corpus
+that did not change, and `name` says what to call the file -- a file name and not a path, because
+which directory a derived file may go in is the store's answer and a configuration may not overrule
+it by writing `../index.json`.
 
 `retrieve` ranks with `overlap`: distinct question terms the node contains, over the square root of
 its length. No idf, no phrases, no vectors, no lemmatisation, and the docstring says so -- a question
@@ -138,7 +212,11 @@ hit under its `node.ref` and asked for one statement per line ending in the refe
 `keep_cited(text, known)` drops every line citing nothing known and returns what was cited, and
 `uncited` counts the loss. The unit is the line, which is why the prompt forbids headings and
 tables -- a consumer wanting either needs its own unit and its own prompt, and `keep_cited` is
-public so it can keep the rule while changing the prose.
+public so it can keep the rule while changing the prose. The prompt is deliberately not an option:
+`keep_cited` enforces what that prompt asks for, so a configuration able to replace the text would
+be able to stop asking for the citations every line is then dropped for, and the run would come back
+empty with nothing in the file to say why. `system` is the option, and it changes the voice in front
+of the prompt rather than the contract inside it.
 
 ## What the metamodel guarantees
 
@@ -169,7 +247,10 @@ declared field, else the type name.
 
 `Assertion` is one act of asserting: an agent, a time, the target carried whole, and optionally the
 assertion it supersedes. Carrying the target whole rather than referencing it makes the log
-self-contained: replaying it reconstructs every state the graph has been in.
+self-contained: replaying it reconstructs every state the graph has been in. An `Agent` is one of
+three kinds -- `AgentKind`, exported by `atlas.model` -- and that name is what the `assert` step
+offers a configuration, so the kinds a file may write are the kinds the metamodel has and a fourth
+spelling is refused as the file is read rather than inside the step.
 
 `Run` is in `atlas/model/` but is not one of the six: it is a record *about* a pass rather than a
 claim about the world, kept because what a pass cost and how much of it survived is otherwise lost
@@ -320,8 +401,9 @@ validation is therefore free; only a changed prompt misses the cache, which it s
   graph search; a question in an inflected form the text does not use finds nothing.
 - `keep_cited` works a line at a time, so a model answering in one uncited paragraph answers nothing
   and a table loses every row without its own citation.
-- A run needs the three model variables even when no step calls a model, because the CLI builds the
-  client before it reads the configuration.
+- A run needs the three model variables even when no step calls a model: the CLI builds one client
+  for every run. The configuration is read first, so a file that is wrong is refused without them,
+  but a valid chain that calls no model still asks for all three.
 - `Match.needs_review` is counted and printed; no step consumes it and there is no review path.
 - `cached_only` has no CLI flag; a key-free replay is `ATLAS_CACHED_ONLY=1` in the environment.
 - Multi-span nodes are representable and never produced: one statement, one span.

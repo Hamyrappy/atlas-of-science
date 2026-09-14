@@ -18,10 +18,10 @@ except ImportError:  # the package was named fitz before version 1.24
     import fitz as pymupdf
 
 from atlas.model import Segment, Source
-from atlas.steps import State, register
+from atlas.steps import Nothing, State, register
 
 
-@register("ingest_pdf", requires=("inputs",), produces=("sources",))
+@register("ingest_pdf", requires=("inputs",), produces=("sources",), options=Nothing)
 def ingest_pdf(state: State) -> State:
     """Read every input of the run as a PDF."""
     return {"sources": tuple(read_pdf(Path(path)) for path in state["inputs"])}

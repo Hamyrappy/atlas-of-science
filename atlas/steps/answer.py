@@ -11,12 +11,21 @@ its own can enforce it without writing it again.
 
 Nothing is asked of the model that can be checked instead: not the source of a node, not
 its quote, not which hits were used -- only the text, and the references beside it.
+
+The prompt above is not an option. `keep_cited` enforces the rule that prompt states, so
+a configuration free to replace the text would be free to stop asking for the citations
+the rule then drops every line for -- an answer that comes back empty with nothing in
+the file to say why. A consumer whose prose is its own writes a step and names it
+instead, as with the ranking, and keeps `keep_cited`. What a configuration may set is
+the system prompt in front of it, which changes the voice and not the contract.
 """
 
 from __future__ import annotations
 
 import re
 from collections.abc import Iterable, Mapping
+
+from pydantic import Field
 
 from atlas.llm import ChatClient
 from atlas.model import Frozen, Schema
@@ -91,14 +100,25 @@ def evidence(hits: Iterable[Hit], schema: Schema) -> str:
     )
 
 
+class AnswerOptions(Frozen):
+    """The system prompt a run puts in front of the model, and nothing else -- see above.
+
+    A system prompt that is present but empty is a line somebody meant to write and did
+    not, so it is refused rather than spending a message on nothing; leaving the key out
+    is how a run says it wants none.
+    """
+
+    system: str | None = Field(None, min_length=1)
+
+
 @register("answer", requires=("hits", "question", "client", "schema"),
-          produces=("answer", "uncited"))
-def answer(state: State, *, system: str | None = None) -> State:
+          produces=("answer", "uncited"), options=AnswerOptions)
+def answer(state: State, options: AnswerOptions) -> State:
     """Ask the model over the hits, and return the answer with its uncited lines gone."""
     client: ChatClient = state["client"]
     hits: tuple[Hit, ...] = state["hits"]
     prompt = PROMPT.format(question=state["question"], evidence=evidence(hits, state["schema"]))
-    reply = client.complete(prompt, system=system)
+    reply = client.complete(prompt, system=options.system)
     known = {hit.node.ref: hit for hit in hits}
     text, citations = keep_cited(reply.text, known)
     written = [line for line in reply.text.splitlines() if line.strip()]

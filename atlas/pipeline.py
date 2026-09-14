@@ -15,6 +15,10 @@ the caller built, which is the shape a request has and a batch run has not.
 
 A configuration reserves four keys -- `schema`, `store`, `imports`, `steps` -- and every
 other key is the caller's, kept in `Pipeline.meta` and read by nothing here.
+
+The options written under a step's name are validated when the file is read, against the
+model that step declared it takes, so a misspelt or wrongly typed one is refused with the
+file and the step in the message rather than being swallowed.
 """
 
 from __future__ import annotations
@@ -30,7 +34,7 @@ from typing import Any
 
 import yaml
 
-from atlas.model import Run, Schema
+from atlas.model import Frozen, Run, Schema
 from atlas.ontology import load
 from atlas.steps import State, Step, get
 from atlas.store import Store, open_store
@@ -43,7 +47,7 @@ OnStep = Callable[[str, int, State, State], None]
 class Pipeline:
     """The steps one configuration names, and the schema they are all run under."""
 
-    def __init__(self, schema: Schema, steps: tuple[tuple[Step, dict], ...], *,
+    def __init__(self, schema: Schema, steps: tuple[tuple[Step, Frozen], ...], *,
                  store: Store | None = None, meta: Mapping[str, Any] | None = None,
                  name: str = "") -> None:
         self.schema = schema
@@ -58,13 +62,15 @@ class Pipeline:
 
         Packs and the store are resolved against the directory of the configuration, so
         it travels with what it names; `imports` is read before the step names are, which
-        is how a file names a step from a package of its own.
+        is how a file names a step from a package of its own. The options under every
+        step name are validated here, against what that step declared, so a file that
+        misspells one is refused before a run starts rather than running without it.
         """
         path = Path(path)
         config = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         for module in _listed(config.get("imports")):
             importlib.import_module(module)
-        steps = tuple(_step(entry) for entry in config.get("steps") or ())
+        steps = tuple(_step(path, entry) for entry in config.get("steps") or ())
         _check_order(path, steps)
         return cls(
             load(*_listed(config.get("schema")), base=path.parent),
@@ -98,7 +104,7 @@ class Pipeline:
         A question answered over a store is a run of the same chain with nothing to ingest.
         """
         for index, (step, options) in enumerate(self.steps):
-            produced = step(state, **options)
+            produced = step(state, options)
             state = state | produced
             if on_step is not None:
                 on_step(step.name, index, produced, state)
@@ -143,17 +149,26 @@ def summary(state: State) -> str:
     return "\t".join(f"{key} {value}" for key, value in counts(state).items())
 
 
-def _step(entry: str | dict) -> tuple[Step, dict]:
-    """One entry of the steps list: a bare name, or a name with its options under it."""
+def _step(path: Path, entry: str | dict) -> tuple[Step, Frozen]:
+    """One entry of the steps list: a bare name, or a name with its options under it.
+
+    The options are read into the model the step declared, so the file is what refuses a
+    misspelt or wrongly typed one, and the message says which file said it.
+    """
     if isinstance(entry, str):
-        return get(entry), {}
-    if len(entry) != 1:
+        name, options = entry, None
+    elif len(entry) != 1:
         raise ValueError(f"a step is one name with its options, not {sorted(entry)}")
-    [(name, options)] = entry.items()
-    return get(name), options or {}
+    else:
+        [(name, options)] = entry.items()
+    step = get(name)
+    try:
+        return step, step.configure(options)
+    except ValueError as invalid:
+        raise ValueError(f"{path}: {invalid}") from invalid
 
 
-def _check_order(path: Path, steps: tuple[tuple[Step, dict], ...]) -> None:
+def _check_order(path: Path, steps: tuple[tuple[Step, Frozen], ...]) -> None:
     """Refuse a chain in which a step reads a key only a later step produces.
 
     A key no step in the file produces belongs to the caller -- a client, a question -- and

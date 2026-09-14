@@ -16,6 +16,7 @@ from pathlib import Path
 import pymupdf
 import pytest
 
+from atlas.model import Frozen
 from atlas.steps import State, register
 from atlas.steps.relocate import Statement
 
@@ -49,10 +50,16 @@ def write_config(tmp_path: Path) -> Callable[[str, str], Path]:
     return write
 
 
-@register("stub_extract")
-def stub_extract(state: State, *, types: dict[str, str] | None = None) -> State:
+class StubExtractOptions(Frozen):
+    """The vocabulary the stub invents statements for: a type name to the field it fills."""
+
+    types: dict[str, str] = {"Thing": "name"}
+
+
+@register("stub_extract", requires=("sources",), produces=("statements", "malformed"),
+          options=StubExtractOptions)
+def stub_extract(state: State, options: StubExtractOptions) -> State:
     """Stand in for a model: one statement per segment per configured type and field."""
-    types = types or {"Thing": "name"}
     statements: list[Statement] = []
     for source in state["sources"]:
         for segment in source.segments:
@@ -65,6 +72,6 @@ def stub_extract(state: State, *, types: dict[str, str] | None = None) -> State:
                     fields={field: quote},
                     quote=quote,
                 )
-                for name, field in types.items()
+                for name, field in options.types.items()
             ]
     return {"statements": tuple(statements), "malformed": 0}

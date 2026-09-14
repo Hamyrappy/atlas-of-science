@@ -8,13 +8,18 @@ for what they change, because they change nothing.
 
 from __future__ import annotations
 
+import re
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 from atlas.model import Span
+from atlas.pipeline import Pipeline
 from atlas.steps import get
-from atlas.steps.ingest_text import cut, ingest_text, read_text
+from atlas.steps.ingest_text import IngestTextOptions, cut, ingest_text, read_text
+
+PACK = "types: []\n"
 
 TEXT = (
     "# Отчёт  о работе\n"
@@ -107,7 +112,36 @@ def test_the_id_names_the_bytes_and_the_title_the_first_line(
 
 
 def test_the_step_reads_every_input_of_the_run(document: Path) -> None:
-    state = ingest_text({"inputs": (document, str(document))})
+    state = ingest_text({"inputs": (document, str(document))}, IngestTextOptions())
 
     assert len(state["sources"]) == 2
     assert get("ingest_text").produces == ("sources",)
+
+
+def test_the_split_a_configuration_writes_reaches_every_input(document: Path) -> None:
+    """Through the registry, as a file reaches it: the mapping is read into the model first."""
+    state = get("ingest_text")({"inputs": (document,)}, {"split": "whole"})
+
+    assert len(state["sources"][0].segments) == 1
+
+
+def test_a_fourth_split_is_refused_when_the_file_is_read_and_the_three_are_named(
+    write_config: Callable[[str, str], Path]
+) -> None:
+    """The check `cut` makes once a run is under way, moved to the reading of the file."""
+    config = write_config(PACK, "  - {ingest_text: {split: sentences}}\n")
+
+    with pytest.raises(ValueError, match=re.escape(
+        "step 'ingest_text': option 'split': Input should be 'blank-line', 'whole' or 'window'"
+    )) as refused:
+        Pipeline.from_config(config)
+
+    assert "pipeline.yaml" in str(refused.value)
+
+
+def test_a_window_of_no_characters_is_refused_rather_than_floored_to_one() -> None:
+    """A configuration says what it meant; `cut` keeps defending itself against its callers."""
+    with pytest.raises(ValueError, match=re.escape("step 'ingest_text': option 'window':")):
+        get("ingest_text").configure({"split": "window", "window": 0})
+
+    assert cut("abc", split="window", window=0) == ("a", "b", "c")

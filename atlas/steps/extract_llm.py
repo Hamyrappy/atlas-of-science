@@ -18,9 +18,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from pydantic import ValidationError
+from pydantic import Field, ValidationError
 
-from atlas.model import Schema
+from atlas.model import Frozen, Schema
 from atlas.steps import State, register
 from atlas.steps.relocate import Statement
 
@@ -46,9 +46,22 @@ Rules:
 """
 
 
+class ExtractLlmOptions(Frozen):
+    """What a configuration may write under `extract_llm`: the noun its prompt uses.
+
+    Free text and not a choice, because the noun belongs to whatever was ingested --
+    pages, turns, slides -- and a list here would be domain content, which this package
+    does not hold. It must be a word: the prompt names the unit in four places, and an
+    empty one leaves four holes.
+    """
+
+    segment: str = Field(default="segment", min_length=1)
+
+
 @register("extract_llm", requires=("sources", "schema", "client"),
-          produces=("statements", "malformed", "tokens", "cached_replies"))
-def extract_llm(state: State, *, segment: str = "segment") -> State:
+          produces=("statements", "malformed", "tokens", "cached_replies"),
+          options=ExtractLlmOptions)
+def extract_llm(state: State, options: ExtractLlmOptions) -> State:
     """Call the model once per segment of every source, for statements nothing has placed yet."""
     client: ChatClient = state["client"]
     schema: Schema = state["schema"]
@@ -61,7 +74,8 @@ def extract_llm(state: State, *, segment: str = "segment") -> State:
     for source in state["sources"]:
         for part in source.segments:
             prompt = PROMPT.format(
-                unit=segment, types=catalogue, number=part.number, text=part.text, key=STATEMENTS
+                unit=options.segment, types=catalogue, number=part.number,
+                text=part.text, key=STATEMENTS,
             )
             body, reply = client.complete_json(prompt, reply_schema)
             parsed, unreadable = _statements(body, source.id, part.number)

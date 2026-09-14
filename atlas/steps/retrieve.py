@@ -59,12 +59,23 @@ class Hit(Frozen):
     score: float
 
 
-@register("retrieve", requires=("store", "index", "question"), produces=("hits",))
-def retrieve(state: State, *, limit: int = LIMIT) -> State:
+class RetrieveOptions(Frozen):
+    """What a configuration may write under `retrieve`, and the only place its default lives.
+
+    The model is the declaration: a key it does not name is refused when the file is read,
+    with this step named, rather than being taken for an option and silently dropped.
+    """
+
+    limit: int = LIMIT
+
+
+@register("retrieve", requires=("store", "index", "question"), produces=("hits",),
+          options=RetrieveOptions)
+def retrieve(state: State, options: RetrieveOptions) -> State:
     """Rank the indexed nodes against the question the run carries, best first."""
     scores = overlap(state["index"], state["question"])
     # Ties break on the node id, so two runs over one corpus rank identically.
-    ordered = sorted(scores.items(), key=lambda scored: (-scored[1], scored[0]))[:limit]
+    ordered = sorted(scores.items(), key=lambda scored: (-scored[1], scored[0]))[:options.limit]
     # The index outlives the node it indexed: a superseded node is no longer projected,
     # and a hit on it would quote evidence the store no longer claims. The store is the
     # authority on what is current, so the ranking is resolved through it and not around it.
