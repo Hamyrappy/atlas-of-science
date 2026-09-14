@@ -67,6 +67,30 @@ Tests never reach the network and never need a key. A test that would call a mod
 - A pack is byte-hashed into `Schema.version`, so editing one changes the version of every future run and invalidates the prompt cache. Domain vocabulary goes into a pack, never into the metamodel.
 - Both are changed with the other people on the project knowing, not in passing.
 
+## Documentation is part of the change
+
+Four documents carry this project, and each has one job. Keep them true; a claim that has quietly
+stopped holding is worse than no claim, because it is trusted.
+
+- `README.md` — what the library is, how to install it, how to run it from the command line, how to
+  import it. Every command and every code sample in it must run as written.
+- `CLAUDE.md` — this file: the invariants, the layout, the rules for changing the metamodel, the
+  direction. It changes when a rule changes, not when code moves.
+- `docs/architecture.md` — the metamodel, the step model, the store, provenance end to end, and the
+  open questions. The reference a contributor reads before touching anything.
+- `docs/ontology.md` and `docs/evaluation.md` — how a pack is written, and what is measured where.
+
+The rule: **a change that alters behaviour updates its document in the same commit.** New public
+function, new step, new configuration key, a renamed field, a changed invariant, a command whose
+output looks different — all of them land with their documentation, not after it. If that feels
+like too much writing for the change, the change is probably bigger than it looked.
+
+Two habits that keep this honest: copy command output into the documentation from a real run rather
+than typing what it should say, and when a document states something is not implemented, delete
+that sentence on the commit that implements it. Anything you had to work out by reading the source
+is a gap in the documentation — write it down where the next person will look, not in a commit
+message.
+
 ## Where this is going
 
 Direction, so that today's code leaves room for it rather than being redone:
