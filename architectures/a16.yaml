@@ -1,0 +1,72 @@
+# Architecture 16 -- the selected subgraph.
+#
+# For a question that does not translate into a pattern, a walk of fixed depth is the
+# wrong shape: it reaches a hundred nodes of which four matter. This grows a small
+# connected region around what the ranking valued, then closes it over its evidence.
+#
+#   atlas run architectures/a16.yaml corpus/*.pdf --store store/
+#   atlas ask architectures/a16.yaml "what connects these two lines of work?" --store store/
+
+variant:
+  id: a16
+  number: 16
+  title: Prize-collecting subgraph selection
+  summary: >-
+    A compact connected region chosen by prizes and edge costs rather than by a fixed
+    depth, with the evidence closure applied afterwards and never traded away for size.
+  mechanism: >-
+    Greedy prize-collecting growth -- start from the best-prized node, attach whichever
+    node pays for the edge to reach it, stop when nothing pays. Not an approximation
+    with a bound, and the module says so, because a module named after PCST and quietly
+    doing something else makes every comparison against it meaningless. A type named in
+    `whole` brings its parts, so an n-ary node is taken entire or not at all. When the
+    closure does not fit, the lowest-prized roots are dropped and the count reported:
+    fewer things with complete grounds, never more without them.
+  family: selected-subgraph traversal
+  optimises: a vague question, where a fixed-depth walk is the wrong shape
+  cost: >-
+    Greedy and unbounded in quality; the prize function is the seam a learned selector
+    would replace, and until there are question-evidence pairs to train on there is
+    nothing learned here.
+  needs: [model]
+  scores: {relevance: 72, novelty: 95, prospect: 90, total: 84}
+  questions:
+    - What connects these two lines of work?
+    - Which grounds did the selector leave out?
+    - What survives a strict context budget?
+  differs:
+    a19: >-
+      A connected region is chosen for the question; path pruning selects specific
+      ordered chains inside one family of relations.
+    a18: >-
+      The region is chosen by prizes and costs against a budget, not by where a
+      diffusion settles.
+  spec: docs/architectures/16-selected-subgraph.md
+
+schema: [science_core, scierc]
+
+steps:
+  - ingest_pdf
+  - {extract_llm: {segment: page}}
+  - relocate
+  - validate
+  - {relate_llm: {segment: page}}
+  - relate
+  - {assert: {agent: run}}
+  - index_nodes
+
+ask:
+  - index_nodes
+  - retrieve
+  - select_subgraph:
+      cost: 0.25
+      limit: 30
+      whole: [EvidenceLine, Study]
+      parts: [rests_on, involves, produced_by]
+      expand:
+        depth: 2
+        limit: 60
+        supports: [supports]
+        opposes: [disputes]
+  - graph_answer
+  - check_answer

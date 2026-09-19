@@ -72,6 +72,8 @@ risks, and which files in this repository implement it.
 | 10 | Materialised entailment with derivation provenance | Asking what the ontology already answers | [10-materialised-entailment.md](10-materialised-entailment.md) |
 | 12 | Semantic units and logic profiles | Not flattening three kinds of claim into one | [12-semantic-units.md](12-semantic-units.md) |
 | 13 | Federation of registries | Not manufacturing consensus out of topology | [13-federation.md](13-federation.md) |
+| 14 | Mapped graph over existing tables | Reading structured data without a round trip | [14-mapped-tables.md](14-mapped-tables.md) |
+| 16 | Prize-collecting subgraph selection | A vague question, at a fixed context budget | [16-selected-subgraph.md](16-selected-subgraph.md) |
 | 15 | Expressive ontology under a formal gate | Catching a contradiction before writing under it | [15-expressive-ontology.md](15-expressive-ontology.md) |
 
 *(This table grows with each architecture; `atlas variants` is the version that cannot
