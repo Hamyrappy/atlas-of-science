@@ -74,10 +74,13 @@ risks, and which files in this repository implement it.
 | 13 | Federation of registries | Not manufacturing consensus out of topology | [13-federation.md](13-federation.md) |
 | 14 | Mapped graph over existing tables | Reading structured data without a round trip | [14-mapped-tables.md](14-mapped-tables.md) |
 | 16 | Prize-collecting subgraph selection | A vague question, at a fixed context budget | [16-selected-subgraph.md](16-selected-subgraph.md) |
+| 18 | Associative graph memory | A question with no pattern | [18-associative-memory.md](18-associative-memory.md) |
+| 19 | Explanatory paths with a preserved counter-path | A compact explanation that stays honest | [19-explanatory-paths.md](19-explanatory-paths.md) |
+| 20 | Answering by a plan of typed graph operators | A compound question | [20-operator-plan.md](20-operator-plan.md) |
 | 15 | Expressive ontology under a formal gate | Catching a contradiction before writing under it | [15-expressive-ontology.md](15-expressive-ontology.md) |
 
-*(This table grows with each architecture; `atlas variants` is the version that cannot
-go stale.)*
+`atlas variants` prints the same list from the manifests, which is the version that
+cannot go stale.
 
 ## Scores
 

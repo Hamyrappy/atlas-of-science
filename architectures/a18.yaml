@@ -1,0 +1,75 @@
+# Architecture 18 -- associative graph memory.
+#
+# For a question that names two things and nothing about how they might be related,
+# relevance is spread through the graph and the places it settles are where to look.
+# What comes back with the ranking is the route -- because "the graph connected them"
+# is not "science established it".
+#
+#   atlas ask architectures/a18.yaml "which work connects these two ideas?" --store store/
+
+variant:
+  id: a18
+  number: 18
+  title: Associative graph memory
+  summary: >-
+    Personalised PageRank from the nodes a question named, ranking the region of the
+    graph reachable by several indirect routes, with the connecting walk returned beside
+    every score and the evidence closure applied afterwards.
+  mechanism: >-
+    Power iteration over the typed projection, restarting at a seed distribution taken
+    from the ranking. Direction never becomes weight -- a diffusion needs non-negative
+    weights and a negative one is not a smaller positive one -- so which side a relation
+    is on stays in the graph and is applied by the closure, which is how a heavily
+    visited claim can turn out to be the disputed one. Per-predicate weights are the
+    control for hub bias, and every ranked node carries the shortest walk from a seed, so
+    a hub with no route to show can be told from a finding.
+  family: associative diffusion
+  optimises: a question with no pattern, where several indirect routes are the evidence
+  cost: >-
+    Hub bias, which no threshold fixes: a relation that means almost nothing makes every
+    well-connected node rank highly for every question.
+  needs: [model]
+  scores: {relevance: 86, novelty: 88, prospect: 88, total: 87}
+  questions:
+    - Which work connects these two distant ideas?
+    - Through which concepts was this result found?
+    - Was this answer caused by a hub term rather than by the science?
+  differs:
+    a04: >-
+      A diffusion is computed for one question and leaves nothing behind; a map is fixed,
+      counted across rounds and checked.
+    a19: >-
+      A region of the graph is ranked; path selection picks specific ordered chains.
+    a16: >-
+      No budget and no prizes: where the walk settles is the answer, rather than what a
+      region is worth.
+  spec: docs/architectures/18-associative-memory.md
+
+schema: [science_core, scierc]
+
+steps:
+  - ingest_pdf
+  - {extract_llm: {segment: page}}
+  - relocate
+  - validate
+  - {relate_llm: {segment: page}}
+  - relate
+  - {assert: {agent: run}}
+  - index_nodes
+
+ask:
+  - index_nodes
+  - retrieve
+  - diffuse:
+      damping: 0.85
+      rounds: 30
+      limit: 12
+      depth: 3
+      weights: {mentions: 0.2}
+      expand:
+        depth: 2
+        limit: 60
+        supports: [supports]
+        opposes: [disputes]
+  - graph_answer
+  - check_answer

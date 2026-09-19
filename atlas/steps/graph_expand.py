@@ -145,8 +145,14 @@ def expand(
     adjacency = Adjacency.of(store.links(), options.follow) if adjacency is None else adjacency
     reached = reach(adjacency, roots, depth=options.depth, limit=options.limit)
     walks = tuple(reached.walks[node_id] for node_id in reached.nodes)
-    kept = {link_id for walk in walks for link_id in walk.links}
     held = set(reached.walks)
+    # Every relation among the nodes held, not only the ones a walk happened to cross.
+    # A walk records how a node was first reached, so a relation between two nodes that
+    # were both roots is in nobody's walk -- and leaving it out of the package dropped
+    # exactly the relations a caller had already decided were the interesting ones.
+    kept = {
+        link.id for link in adjacency.links.values() if link.src in held and link.dst in held
+    }
 
     # An objection is pulled in whatever the budget did. It is the one thing a package
     # may not lose quietly: a summary built without it reads like a consensus.
