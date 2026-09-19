@@ -152,7 +152,11 @@ def _named(annotation: Any) -> str:
 
 
 from atlas.steps import (  # noqa: E402, F401
+    align,
     answer,
+    check_answer,
+    compare,
+    critique,
     define_llm,
     extract_llm,
     graph_answer,
@@ -161,11 +165,14 @@ from atlas.steps import (  # noqa: E402, F401
     induce,
     ingest_pdf,
     ingest_text,
+    lineage,
     markdown,
+    reconcile,
     record,
     relate,
     relate_llm,
     relocate,
+    repair,
     retrieve,
     salience,
     topics,
