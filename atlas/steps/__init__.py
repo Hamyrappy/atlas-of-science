@@ -161,6 +161,7 @@ from atlas.steps import (  # noqa: E402, F401
     define_llm,
     entail,
     extract_llm,
+    federate,
     formal_check,
     graph_answer,
     graph_expand,
@@ -181,5 +182,6 @@ from atlas.steps import (  # noqa: E402, F401
     route,
     salience,
     topics,
+    units,
     validate,
 )

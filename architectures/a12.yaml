@@ -1,0 +1,72 @@
+# Architecture 12 -- semantic units.
+#
+# "Some X have Y", "usually X have Y" and "all X have Y" are three different claims, and
+# a store that recorded all three as "X relates to Y" has thrown away the thing that
+# decides what a counterexample means. Here the form of a claim is recorded, and whether
+# it may be reasoned over is decided by how complete that form is.
+#
+#   atlas run architectures/a12.yaml corpus/*.pdf --store store/
+#   atlas ask architectures/a12.yaml "is this a universal claim or a single observation?" \
+#       --store store/
+
+variant:
+  id: a12
+  number: 12
+  title: Semantic units and logic profiles
+  summary: >-
+    The form of what is claimed -- kind, quantifier, polarity, modality, scope -- recorded
+    beside the claim, with a mechanical ruling on whether it is complete enough to be
+    reasoned over and the original wording kept whatever the ruling.
+  mechanism: >-
+    `compile_units` reads the form off a SemanticUnit node and assigns one of three
+    profiles. An unknown polarity is `unsupported` rather than `lossy`, because a claim
+    whose negation scope nobody recorded can mean either of two opposite things; an
+    unstated quantifier is merely lossy. Which kinds, quantifiers and modalities count
+    is a run's configuration, and with nothing configured nothing is exact -- the safe
+    direction to fail in. Nothing is filtered out of a package: a unit that may not be
+    a premise is still what a source said.
+  family: semantic-unit traversal
+  optimises: not flattening three different kinds of claim into one relation
+  cost: >-
+    A form to extract per claim, and a good deal that comes back unsupported on a corpus
+    whose sentences do not state their own quantifiers.
+  needs: [model]
+  scores: {relevance: 80, novelty: 97, prospect: 95, total: 89}
+  questions:
+    - Is this a universal claim or a single observation?
+    - Which counterexamples bear on this conditional claim?
+    - Which parts of this answer were formally checked, and which were only quoted?
+  differs:
+    a10: >-
+      What is kept is the variety of scientific statements, including the ones that do
+      not translate exactly; entailment is available where the form permits it and
+      refused, by name, where it does not.
+    a05: >-
+      The subject is the content of the claim rather than the work behind it.
+  spec: docs/architectures/12-semantic-units.md
+
+schema: [science_core, semantic_units]
+
+steps:
+  - {formal_check: {strict: true}}
+  - ingest_pdf
+  - {extract_llm: {segment: page}}
+  - relocate
+  - validate
+  - {relate_llm: {segment: page}}
+  - relate
+  - {assert: {agent: run}}
+  - index_nodes
+
+ask:
+  - index_nodes
+  - compile_units:
+      type: SemanticUnit
+      kinds: [existential, statistical, universal, conditional, comparative]
+      quantifiers: [some, most, all, none]
+      polarities: [affirmative, negative]
+      modalities: [assertoric]
+  - retrieve
+  - {graph_expand: {depth: 3, limit: 60, supports: [supports], opposes: [disputes]}}
+  - mark_units
+  - graph_answer

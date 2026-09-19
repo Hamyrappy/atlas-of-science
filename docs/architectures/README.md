@@ -70,6 +70,8 @@ risks, and which files in this repository implement it.
 | 7 | Routed scientific GraphRAG | Not answering three questions with one retriever | [07-routed-graphrag.md](07-routed-graphrag.md) |
 | 8 | Relational execution of the graph contract | Answering from a large store without reading it | [08-relational.md](08-relational.md) |
 | 10 | Materialised entailment with derivation provenance | Asking what the ontology already answers | [10-materialised-entailment.md](10-materialised-entailment.md) |
+| 12 | Semantic units and logic profiles | Not flattening three kinds of claim into one | [12-semantic-units.md](12-semantic-units.md) |
+| 13 | Federation of registries | Not manufacturing consensus out of topology | [13-federation.md](13-federation.md) |
 | 15 | Expressive ontology under a formal gate | Catching a contradiction before writing under it | [15-expressive-ontology.md](15-expressive-ontology.md) |
 
 *(This table grows with each architecture; `atlas variants` is the version that cannot
