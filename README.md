@@ -216,14 +216,26 @@ atlas/
   model/             the metamodel: source, span, node, link, assertion, schema
   ontology/          reading packs off disk and merging them into one schema
   text.py            folding, normalising and tokenising, shared by relocation and indexing
-  store/             the append-only log, in memory and on disk, and the projections over it
-  steps/             ingest, rendering, extraction, relocation, validation, recording,
-                     indexing, retrieval, answering
+  walk.py            one ruling on what a neighbour is, and what a path is
+  store/             the append-only log -- in memory, as JSON lines, in SQLite -- and the
+                     projections over it
+  steps/             forty-five of them: ingest, extraction, relocation, relation,
+                     validation, critique and repair, induction, entailment, recording,
+                     indexing, seven ways of selecting an evidence package, answering
+  catalogue.py       the architectures on offer, read off their manifests
   pipeline.py        a configuration of step names run in order over one dict of state
   scaffold.py        the project skeleton `atlas init` writes
   llm.py             the chat client, with a disk cache in front of it
-  cli.py             the two subcommands, run and init
+  cli.py             run, ask, init and variants
+architectures/       one manifest per architecture: the packs, the chain that builds, the
+                     chain that answers, and why anyone would choose it
 packs/
+  science_core.yaml  the argument: claim, position, evidence line, result, conditions,
+                     computation -- with ECO, BFO, IAO, OBI, SIO and EVI identities
+  process.yaml       plan against run, conditions, positive and negative results
+  science_map.yaml   the topic layer, which is deliberately not a taxonomy
+  semantic_units.yaml  the form of a claim: kind, quantifier, polarity, modality
+  scierc.yaml        a local versioned profile of the SciERC annotation scheme
   ml_paper.yaml      one domain's ontology: six node types and eight predicates
   README.md          what a pack is and how to write one
                      (shipped in the wheel; `atlas.ontology.builtin("ml_paper")` is its path)
@@ -231,10 +243,12 @@ pipeline.yaml        the default run over that pack
 tests/               the suite; no network, no API key, no committed binaries
 docs/
   architecture.md    the metamodel, the step model, the store, the open questions
+  architectures/     one specification per architecture, and the rule they all obey
   ontology.md        what a pack declares, how identity works, how the version is hashed
   evaluation.md      the measurement contract: competency questions, seams, negative controls
   initiative.ru.md   the Russian write-up of the initiative
 CLAUDE.md            how to work in this repository: invariants, layout, direction
+HANDOFF.md           what the work stands at, and the bar the next agent has to meet
 index.html           the project page
 ```
 
@@ -251,23 +265,48 @@ index.html           the project page
 - The model is asked for a verbatim quote and never for character offsets, which it would invent;
   offsets are recovered by searching the segment text.
 
+## Architectures
+
+An architecture here is a configuration, not a mode or a class: a manifest under
+`architectures/` naming the packs it loads, the chain that builds the graph, the chain that
+answers over it, and the options each step runs under. Nothing in `atlas/` branches on which one
+is in use.
+
+```bash
+atlas variants                    # what is on offer
+atlas variants a18 --json         # one of them, as an interface reads it
+atlas run architectures/a05.yaml corpus/*.pdf --store store/
+atlas ask architectures/a05.yaml "under which conditions does this hold?" --store store/
+```
+
+Fifteen ship. They differ in three places — what is stored about a claim (5, 8, 12, 13, 14), how
+the vocabulary and the graph come to exist (4, 6, 10, 15), and how the evidence package is
+selected (0, 7, 16, 18, 19, 20) — and they share everything else, which is what makes them
+comparable. Each has a specification in `docs/architectures/` with the same eleven sections.
+
+**The rule they all obey: an answer is built from a walked graph.** Ranking finds where to start;
+it does not find an answer. Every `ask` chain builds a `Bundle` and answers from one, an objection
+survives a budget that everything else loses to, and a package that walked nothing is reported as
+a gap rather than handed to a model. `tests/test_catalogue.py` checks that over every manifest.
+
 ## Status
 
-Working today: the metamodel and its projections; pack loading, merging, identity and validation;
-an append-only store in memory and as JSON lines on disk, opened by the name a configuration gives
-it, keeping the runs that wrote it and the schemas its objects name; the steps for PDF and plain-text
-ingest, a markdown rendering that reads back into the same source and the same offsets, extraction
-of typed statements one segment at a time, relocation of each quote into a span, validation against
-the loaded pack, recording as assertions, and — over a store a build filled earlier — indexing,
-term-overlap retrieval and an answer whose uncited lines are dropped; the cached model client; the
-`run` and `init` subcommands.
+Working today: the metamodel and its projections; pack loading, merging, identity, relation
+characteristics, disjointness and validation; an append-only store in memory, as JSON lines, and
+in SQLite with the graph reads pushed into recursive queries; ingest for PDF, plain text, markdown
+and delimited tables; extraction of typed statements and of relations, each bound to a quote the
+library places itself; deterministic critics with a bounded repair and a quarantine; induction of
+what the pack has no word for, with a gate that produces a proposal and never an edit; a formal
+gate over the schema; materialised entailment with the derivation of every consequence; seven ways
+of selecting an evidence package, and an answering step whose uncited lines are dropped and whose
+ungrounded packages are refused; the cached model client; `run`, `ask`, `init` and `variants`.
 
-Not implemented yet: link extraction, so a `Link` validates and stores but no step produces one;
-canonicalisation across sources; the evaluation harness, whose contract is written in
-`docs/evaluation.md` and whose code does not exist; the levels above L1; a store in a database. The
-shipped ranking is term overlap with a length normalisation and nothing else — enough to answer
-from hundreds of documents, and honest about missing a question phrased in words the text avoids.
-One pack ships, for machine-learning papers, and it is an example rather than a core.
+Not implemented yet: canonicalisation of nodes across sources; the evaluation harness, whose
+contract is written in `docs/evaluation.md` and whose code does not exist; a store in PostgreSQL.
+The shipped ranking is term overlap with a length normalisation and nothing else — enough to
+answer from hundreds of documents, and honest about missing a question phrased in words the text
+avoids. Nothing here has been run over a corpus large enough to rank the architectures against
+each other, and the scores in their manifests say so wherever they appear.
 
 ## Licence
 

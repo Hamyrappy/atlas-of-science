@@ -120,12 +120,19 @@ def get(name: str) -> Step:
 
 
 def _takes(options: type[Frozen]) -> str:
-    """The options a step knows, written as the fields declaring them are: name, type, default."""
+    """The options a step knows, written as the fields declaring them are: name, type, default.
+
+    The default is asked for rather than read off the field, because a field declared
+    with a factory holds a sentinel and not a value: printing it put `PydanticUndefined`
+    in front of somebody editing a configuration, which is the one audience this message
+    exists for.
+    """
     if not options.model_fields:
         return "no options"
     return ", ".join(
         f"{name}: {_named(field.annotation)}"
-        + ("" if field.is_required() else f" = {field.default!r}")
+        + ("" if field.is_required()
+           else f" = {field.get_default(call_default_factory=True)!r}")
         for name, field in options.model_fields.items()
     )
 
