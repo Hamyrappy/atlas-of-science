@@ -153,10 +153,12 @@ def _named(annotation: Any) -> str:
 
 from atlas.steps import (  # noqa: E402, F401
     answer,
+    define_llm,
     extract_llm,
     graph_answer,
     graph_expand,
     index_nodes,
+    induce,
     ingest_pdf,
     ingest_text,
     markdown,
@@ -165,5 +167,7 @@ from atlas.steps import (  # noqa: E402, F401
     relate_llm,
     relocate,
     retrieve,
+    salience,
+    topics,
     validate,
 )

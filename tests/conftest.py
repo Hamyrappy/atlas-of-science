@@ -167,6 +167,7 @@ WIRING = (
     ("result-2", "observed_under", "u2", 2),
     ("result-1", "derived_from", "run", 5),
     ("run", "used_dataset", "archive", 5),
+    ("u1", "comparable_with", "u2", 2),
 )
 
 

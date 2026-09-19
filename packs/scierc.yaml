@@ -86,8 +86,12 @@ predicates:
     range: OtherScientificTerm
     description: A candidate terminological inclusion, not a subclass axiom.
 
-  - name: part_of
-    iri: atlas:partOf
+  # Named apart from `science_core`'s `part_of` on purpose. That one is the SIO part
+  # relation between things in the world; this one is what the annotation scheme marks
+  # between two mentions in a text, and merging them by their label is exactly the
+  # bridge mistake the scheme warns about.
+  - name: part_of_mention
+    iri: atlas:partOfMention
     domain: Method
     range: Method
     description: A part in the stated sense; composition of a model and of a text are not one.

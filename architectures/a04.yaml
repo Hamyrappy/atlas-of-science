@@ -1,0 +1,80 @@
+# Architecture 4 -- discovery from the corpus, with a map that is not a taxonomy.
+#
+# The scientific core is imported up front and the corpus extends it: what the pack has
+# no word for is pooled, defined, checked against what already exists, and promoted only
+# when there is a case for it. A separate topic layer maps what is discussed together,
+# and never becomes a class.
+#
+# Run it repeatedly over a growing corpus -- the pool is kept beside the store, so
+# "stable across two rounds" means two runs and not two paragraphs:
+#   atlas run architectures/a04.yaml corpus/*.pdf --store store/
+#   atlas run architectures/a04.yaml more/*.pdf   --store store/
+#   atlas ask architectures/a04.yaml "what has this corpus started calling new?" --store store/
+#
+# The proposal lands in the store directory as `proposal.yaml`. It is a file for a
+# person to read, not a pack: nothing here edits the vocabulary a corpus is marked up
+# against.
+
+variant:
+  id: a04
+  number: 4
+  title: Corpus induction and the science map
+  summary: >-
+    An imported scientific core the corpus is allowed to extend: refusals are pooled,
+    defined and gated, and a separate topic layer maps the field without pretending to
+    classify it.
+  mechanism: >-
+    A salience pass keeps the regions worth reading; whatever the pack refuses is pooled
+    by label overlap and counted in independent source families; a definition in genus
+    and differentia is asked for, the closest existing term is reported, and a gate of
+    support, stability, definition and reuse decides what becomes a proposal. Topics are
+    the connected groups of the graph and carry the kinds of their members, so a group
+    of several kinds is visibly a subject area and not a class.
+  family: dual-level retrieval
+  optimises: finding what the vocabulary is missing, without inventing it
+  cost: >-
+    Two model passes per segment; a pool that needs several rounds before anything
+    promotes; topics that shift as the corpus grows, which is the map working and looks
+    like instability.
+  needs: [model]
+  scores: {relevance: 91, novelty: 92, prospect: 94, total: 92}
+  questions:
+    - Which concepts has this corpus started using that the vocabulary has no word for?
+    - Is this a new topic or a new kind of thing?
+    - Which of the words we were about to mint does an imported vocabulary already have?
+  differs:
+    a00: >-
+      The profile is not fixed: a word the corpus keeps using is pooled instead of
+      being thrown away, and the map layer exists at all.
+    a18: >-
+      Groups are fixed, counted across rounds and checked; a diffusion ranks a
+      neighbourhood for one question and leaves nothing behind.
+  spec: docs/architectures/04-corpus-induction.md
+
+schema: [science_core, science_map, scierc]
+
+steps:
+  - ingest_pdf
+  - {extract_llm: {segment: page}}
+  - salience_llm:
+      segment: page
+      type: Passage
+      field: category
+      summary_field: summary
+      categories: [contribution, definition, limitation, negative result]
+  - relocate
+  - validate
+  - {relate_llm: {segment: page}}
+  - relate
+  - {assert: {agent: run}}
+  - induce
+  - define_llm
+  - {promote: {min_support: 3, min_rounds: 2, parent: Entity}}
+  - index_nodes
+
+ask:
+  - index_nodes
+  - {topics: {min_size: 2}}
+  - {retrieve_dual: {topics: 2, weight: 0.5}}
+  - {graph_expand: {depth: 2, limit: 50, supports: [supports], opposes: [disputes]}}
+  - graph_answer

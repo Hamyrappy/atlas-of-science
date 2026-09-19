@@ -64,6 +64,7 @@ risks, and which files in this repository implement it.
 | # | Architecture | Optimises | Specification |
 |---|---|---|---|
 | 0 | Graph control | Being comparable with the others | [00-graph-control.md](00-graph-control.md) |
+| 4 | Corpus induction and the science map | Finding what the vocabulary is missing | [04-corpus-induction.md](04-corpus-induction.md) |
 
 *(This table grows with each architecture; `atlas variants` is the version that cannot
 go stale.)*
