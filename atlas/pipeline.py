@@ -13,8 +13,15 @@ A run can be watched and entered part-way: `on_step` is called with the name eac
 was configured under, `initial` is public, and `run_state` runs the chain over a state
 the caller built, which is the shape a request has and a batch run has not.
 
-A configuration reserves four keys -- `schema`, `store`, `imports`, `steps` -- and every
-other key is the caller's, kept in `Pipeline.meta` and read by nothing here.
+A configuration reserves five keys -- `schema`, `store`, `imports`, `steps`, `ask` --
+and every other key is the caller's, kept in `Pipeline.meta` and read by nothing here.
+
+A file may hold more than one chain. `steps` is the one a run takes by default and
+`ask` is the one that answers a question over what that run wrote, because those are
+two different chains over one vocabulary and one store, and splitting them into two
+files would put the pack, the store and the options in two places to be kept in step.
+`chain` names which of them to read; everything else about reading a configuration --
+the imports, the ordering check, the options -- is the same whichever was named.
 
 The options written under a step's name are validated when the file is read, against the
 model that step declared it takes, so a misspelt or wrongly typed one is refused with the
@@ -39,7 +46,9 @@ from atlas.ontology import load
 from atlas.steps import State, Step, get
 from atlas.store import Store, open_store
 
-RESERVED = ("schema", "store", "imports", "steps")
+RESERVED = ("schema", "store", "imports", "steps", "ask")
+CHAIN = "steps"
+ASK = "ask"
 SEEDED = ("inputs", "schema", "at", "store")
 OnStep = Callable[[str, int, State, State], None]
 
@@ -57,27 +66,34 @@ class Pipeline:
         self.name = name
 
     @classmethod
-    def from_config(cls, path: Path | str) -> Pipeline:
-        """Read a configuration: packs, store, imports, and the steps to run in order.
+    def from_config(cls, path: Path | str, chain: str = CHAIN) -> Pipeline:
+        """Read a configuration: packs, store, imports, and the steps of one chain, in order.
 
         Packs and the store are resolved against the directory of the configuration, so
         it travels with what it names; `imports` is read before the step names are, which
         is how a file names a step from a package of its own. The options under every
         step name are validated here, against what that step declared, so a file that
         misspells one is refused before a run starts rather than running without it.
+
+        `chain` is which list of steps to read -- `steps` to build, `ask` to answer over
+        what was built. A file that does not hold the named chain is refused by name,
+        because a run that silently does nothing is the worst of the three outcomes.
         """
         path = Path(path)
         config = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        if chain != CHAIN and not config.get(chain):
+            held = ", ".join(key for key in RESERVED if config.get(key)) or "nothing"
+            raise ValueError(f"{path}: no {chain!r} chain; it holds {held}")
         for module in _listed(config.get("imports")):
             importlib.import_module(module)
-        steps = tuple(_step(path, entry) for entry in config.get("steps") or ())
+        steps = tuple(_step(path, entry) for entry in config.get(chain) or ())
         _check_order(path, steps)
         return cls(
             load(*_listed(config.get("schema")), base=path.parent),
             steps,
             store=open_store(config["store"], path.parent) if config.get("store") else None,
             meta={key: value for key, value in config.items() if key not in RESERVED},
-            name=path.name,
+            name=path.name if chain == CHAIN else f"{path.name}:{chain}",
         )
 
     def initial(self, inputs: Iterable[Path | str] = (), **context: Any) -> State:
