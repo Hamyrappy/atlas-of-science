@@ -60,6 +60,9 @@ class Bundle(Frozen):
     walks: tuple[Walk, ...] = ()
     supporting: tuple[str, ...] = ()
     opposing: tuple[str, ...] = ()
+    derived: tuple[str, ...] = Field(
+        default=(), description="Links nobody claimed, which a materialisation inferred"
+    )
     reasons: Mapping[str, str] = {}
     snapshot: str = Field(default="", description="Schema version the package was built under")
     method: str = Field(default="", description="Which architecture's selection produced it")

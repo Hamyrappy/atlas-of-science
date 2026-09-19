@@ -42,6 +42,8 @@ Rules:
   one holds under. Do not average them and do not drop the smaller side.
 - Where a relation is needed for the answer and the package does not hold it, say that
   it is missing rather than inferring it.
+- A relation marked "inferred" was computed by the system from the ones above it. Say so
+  when you use one: write that it follows, not that a source reports it.
 - Answer in the language of the question, in prose, with no preamble and no heading.
 
 Question: {question}
@@ -81,10 +83,18 @@ def relations(bundle: Bundle, schema: Schema) -> str:
 
     Written from the links rather than from the walks, so a relation that was pulled in
     after the walk -- an objection kept against the budget -- is shown like any other.
+
+    A relation nobody claimed is marked *(inferred)*. An answer that presented a
+    consequence the system computed as something a source reported would be the worst
+    mistake an entailment layer can make, and the marking is the prompt's only defence
+    against it.
     """
     named = {node.id: f"{schema.label_of(node)} [{node.ref}]" for node in bundle.nodes}
+    inferred = set(bundle.derived)
     return "\n".join(
-        f"- {named.get(link.src, link.src)} --{link.predicate}--> {named.get(link.dst, link.dst)}"
+        f"- {named.get(link.src, link.src)} --{link.predicate}--> "
+        f"{named.get(link.dst, link.dst)}"
+        + (" (inferred, not stated by any source)" if link.id in inferred else "")
         for link in bundle.links
     )
 

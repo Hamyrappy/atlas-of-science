@@ -69,6 +69,8 @@ risks, and which files in this repository implement it.
 | 6 | Critic, bounded repair and conflict review | The cost of a wrong record | [06-critic-pipeline.md](06-critic-pipeline.md) |
 | 7 | Routed scientific GraphRAG | Not answering three questions with one retriever | [07-routed-graphrag.md](07-routed-graphrag.md) |
 | 8 | Relational execution of the graph contract | Answering from a large store without reading it | [08-relational.md](08-relational.md) |
+| 10 | Materialised entailment with derivation provenance | Asking what the ontology already answers | [10-materialised-entailment.md](10-materialised-entailment.md) |
+| 15 | Expressive ontology under a formal gate | Catching a contradiction before writing under it | [15-expressive-ontology.md](15-expressive-ontology.md) |
 
 *(This table grows with each architecture; `atlas variants` is the version that cannot
 go stale.)*
