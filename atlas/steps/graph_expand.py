@@ -124,6 +124,7 @@ def expand(
     reasons: Mapping[str, str] | None = None,
     snapshot: str = "",
     method: str = "",
+    adjacency: Adjacency | None = None,
 ) -> Bundle:
     """Build a package around some nodes: the shared body of every architecture's retrieval.
 
@@ -131,9 +132,14 @@ def expand(
     pruned set of paths and a prize-collecting subtree each choose their own roots and
     their own walks, and then all of them need the same closure -- the nodes resolved
     through the store, the objections pulled back in, the package told what it cost.
+
+    `adjacency` is for a store that can answer a bounded neighbourhood better than by
+    handing over every link it holds. The caller has then already decided which part of
+    the graph is in play; everything after that is the same, which is what keeps one
+    package contract across architectures that fetch their graphs very differently.
     """
     roots = tuple(dict.fromkeys(roots))
-    adjacency = Adjacency.of(store.links(), options.follow)
+    adjacency = Adjacency.of(store.links(), options.follow) if adjacency is None else adjacency
     reached = reach(adjacency, roots, depth=options.depth, limit=options.limit)
     walks = tuple(reached.walks[node_id] for node_id in reached.nodes)
     kept = {link_id for walk in walks for link_id in walk.links}

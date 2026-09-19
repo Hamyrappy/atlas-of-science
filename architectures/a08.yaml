@@ -1,0 +1,61 @@
+# Architecture 8 -- the relational Atlas.
+#
+# The same append-only log, kept in SQLite with a projection beside it, so a graph read
+# is a query and an evidence package is a bounded neighbourhood fetched rather than a
+# corpus scanned. The package is the same object every other architecture produces.
+#
+#   atlas run architectures/a08.yaml corpus/*.pdf
+#   atlas ask architectures/a08.yaml "which results rest on this dataset?"
+
+variant:
+  id: a08
+  number: 8
+  title: Relational execution of the graph contract
+  summary: >-
+    The graph contract executed by a relational engine: an append-only log in SQLite, a
+    projection maintained on write, and neighbourhoods computed by recursive query.
+  mechanism: >-
+    `assert_` writes the assertion and moves the projection in one transaction, and
+    superseding deletes from the projection and never from the log. `reach` walks the
+    link table from the seeds to a bounded depth inside the database, in both
+    directions, with `UNION` terminating cycles. `graph_expand_sql` builds the package
+    from that neighbourhood, and fetches the objections that touch it in a second query
+    -- the relations a bounded walk would otherwise lose.
+  family: relational traversal
+  optimises: answering from a large store without reading it
+  cost: >-
+    A projection to keep in step with the log, and a store that must be asked for its
+    own reads rather than handing over its links.
+  needs: []
+  scores: {relevance: 88, novelty: 78, prospect: 88, total: 86}
+  questions:
+    - Which results rest on this dataset, at what remove?
+    - Which studies are comparable on the data and the measure?
+    - What does the store currently claim, without replaying its history?
+  differs:
+    a05: >-
+      What changes is where the graph read happens, not what is recorded: the same
+      vocabulary, executed by a query planner.
+    a07: >-
+      One route, executed well, rather than three routes over one canonical graph.
+  spec: docs/architectures/08-relational.md
+
+schema: [science_core, scierc]
+
+store: {sqlite: {path: store/atlas.db}}
+
+steps:
+  - ingest_pdf
+  - {extract_llm: {segment: page}}
+  - relocate
+  - validate
+  - {relate_llm: {segment: page}}
+  - relate
+  - {assert: {agent: run}}
+  - index_nodes
+
+ask:
+  - index_nodes
+  - retrieve
+  - {graph_expand_sql: {depth: 3, limit: 80, supports: [supports], opposes: [disputes]}}
+  - graph_answer

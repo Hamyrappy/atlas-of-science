@@ -1,0 +1,71 @@
+# Architecture 7 -- the routed Atlas.
+#
+# Three kinds of question, three ways of seeding one walk. A fact takes the
+# neighbourhood of what the question named; a question about how things connect takes a
+# longer walk; a question about a whole field takes entire communities rather than the
+# best eight passages.
+#
+#   atlas run architectures/a07.yaml corpus/*.pdf --store store/
+#   atlas ask architectures/a07.yaml "how has this field moved?" --store store/
+
+variant:
+  id: a07
+  number: 7
+  title: Routed scientific GraphRAG
+  summary: >-
+    One Atlas with three routes: a fact, a question about how things connect, and a
+    question about a whole field. What the route changes is which seeds the walk starts
+    from -- never whether the graph is walked.
+  mechanism: >-
+    A deterministic router matches configured markers first and asks the model only
+    where nothing matched, recording which decided it. A community partition by greedy
+    modularity gives the overview route whole regions to seed from, capped and reported
+    when the cap binds, because a question about how much of a field does something is a
+    question about a set. Community reports are derived text and are not nodes, so no
+    generator can cite a summary in place of the work it summarises.
+  family: routed traversal
+  optimises: not answering three kinds of question with one retriever
+  cost: >-
+    The most moving parts of any architecture here: a router that can be wrong, a
+    partition to recompute, and three behaviours to keep honest instead of one.
+  needs: [model]
+  scores: {relevance: 92, novelty: 90, prospect: 95, total: 93}
+  questions:
+    - What exactly did this study show?
+    - Which directions use similar methods?
+    - How has this field moved, and on what is that based?
+  differs:
+    a04: >-
+      The map is a navigation layer only; it is not a source of new vocabulary, and no
+      induction runs.
+    a19: >-
+      The router picks a family of computation; path pruning optimises the set of paths
+      inside one family.
+  spec: docs/architectures/07-routed-graphrag.md
+
+schema: [science_core, scierc]
+
+steps:
+  - ingest_pdf
+  - {extract_llm: {segment: page}}
+  - relocate
+  - validate
+  - {relate_llm: {segment: page}}
+  - relate
+  - {assert: {agent: run}}
+  - index_nodes
+
+ask:
+  - index_nodes
+  - route:
+      routes: [fact, connections, overview]
+      default: fact
+      ask_model: false
+      markers:
+        overview: [how has, trend, overall, landscape, over time]
+        connections: [compare, between, similar, related to]
+  - {communities: {min_size: 2}}
+  - {retrieve_routed: {overview: overview, communities: 2, cap: 300}}
+  - {graph_expand: {depth: 3, limit: 80, supports: [supports], opposes: [disputes]}}
+  - graph_answer
+  - check_answer

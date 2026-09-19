@@ -67,6 +67,8 @@ risks, and which files in this repository implement it.
 | 4 | Corpus induction and the science map | Finding what the vocabulary is missing | [04-corpus-induction.md](04-corpus-induction.md) |
 | 5 | Experiments, conditions and reproducibility | Answering "under which conditions" | [05-process-atlas.md](05-process-atlas.md) |
 | 6 | Critic, bounded repair and conflict review | The cost of a wrong record | [06-critic-pipeline.md](06-critic-pipeline.md) |
+| 7 | Routed scientific GraphRAG | Not answering three questions with one retriever | [07-routed-graphrag.md](07-routed-graphrag.md) |
+| 8 | Relational execution of the graph contract | Answering from a large store without reading it | [08-relational.md](08-relational.md) |
 
 *(This table grows with each architecture; `atlas variants` is the version that cannot
 go stale.)*
