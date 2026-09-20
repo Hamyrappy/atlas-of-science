@@ -1,0 +1,70 @@
+# Architecture 15 -- the expressive ontology with a formal gate.
+#
+# Chosen when the questions genuinely need definitions a lightweight profile cannot
+# express. The gate runs over the schema at release, never over extracted data, and a
+# class nothing can be fails the release even though nothing instantiates it.
+#
+#   atlas run architectures/a15.yaml corpus/*.pdf --store store/
+#   atlas ask architectures/a15.yaml "does membership follow from these properties?" --store store/
+
+variant:
+  id: a15
+  number: 15
+  title: Expressive ontology under a formal gate
+  summary: >-
+    An ontology carrying real axioms -- disjointness, inverses, relation characteristics
+    -- checked before anything is written under it, with the entailment it licenses
+    available at query time and marked as inference.
+  mechanism: >-
+    `formal_check` inspects the pack in four groups: hierarchy, disjointness, relations
+    and inverses. A type whose ancestry contains two disjoint types is unsatisfiable and
+    fails the release with no instance required, because the first instance would be a
+    node that cannot exist. A check the budget stopped is reported as not run, so a pack
+    too large to check fails rather than passes. The gate is strict in the build chain,
+    which means a broken pack stops a run before it writes anything.
+  family: entailment traversal
+  optimises: catching a contradiction in the vocabulary before a corpus is written under it
+  cost: >-
+    Curation. An expressive pack is harder to write and harder to keep satisfiable, and
+    if a lighter profile answers the same questions this buys nothing.
+  needs: [model]
+  scores: {relevance: 75, novelty: 70, prospect: 83, total: 77}
+  questions:
+    - Does membership of this class follow from the properties recorded?
+    - Which axioms make this classification impossible?
+    - Why can these two vocabularies not be merged by this bridge?
+  differs:
+    a10: >-
+      The gate is the subject: what is optimised is the correctness of the vocabulary,
+      not the cheapness of querying its consequences.
+    a06: >-
+      What is checked is the ontology, not the extraction -- and it is checked over the
+      schema only, never over data, where open-world inference would invent the missing
+      spans the markup layer exists to refuse.
+  spec: docs/architectures/15-expressive-ontology.md
+
+schema: [science_core, process, science_map]
+
+steps:
+  - {formal_check: {strict: true, budget: 2000}}
+  - ingest_pdf
+  - {extract_llm: {segment: page}}
+  - relocate
+  - validate
+  - {relate_llm: {segment: page}}
+  - relate
+  - {assert: {agent: run}}
+  - index_nodes
+
+ask:
+  - {formal_check: {strict: true}}
+  - index_nodes
+  - retrieve
+  - {entail: {rounds: 8}}
+  - graph_expand_entailed:
+      depth: 3
+      limit: 80
+      supports: [supports]
+      opposes: [disputes]
+  - graph_answer
+  - check_answer

@@ -95,6 +95,32 @@ parent may be declared anywhere in the merged packs, before or after the child; 
 a parent that resolves nowhere. A cycle between two parents is not refused at load time, but the
 ancestor walk terminates on one rather than hanging.
 
+## Axioms a pack may declare
+
+Beyond names and fields, a pack may say three things that something executes.
+
+`disjoint_with` on a type names the types nothing may be both of. It is inherited downwards, so
+declaring it once on a pair of roots covers every pair of leaves under them, and it is an axiom
+rather than a hint: `formal_check` fails a release whose type descends from something it is
+declared disjoint from, **with no instance required**, because the first instance would be a node
+that cannot exist. `science_core.yaml` declares `MaterialEntity`, `Process` and
+`InformationEntity` pairwise disjoint, which is the BFO bridge written as something a gate can
+fail on -- a file of instructions is not the procedure being carried out, and neither is a sample.
+
+`characteristics` on a predicate names how the relation behaves, and there are exactly two:
+`transitive` and `symmetric`. Two, because those are the ones a closure can compute without either
+a reasoner or a decision about what to do when it fails to terminate; a pack naming a third is
+told so by name rather than having the word accepted and ignored.
+
+`inverse_of` names the predicate that is this one read the other way. A pack states the pair once,
+on whichever of the two it was natural to write it on, and both directions answer -- otherwise
+half of every inverse would be derivable and the other half silently not.
+
+What executes them is `atlas/steps/entail.py`, and what checks them is
+`atlas/steps/formal_check.py`. Neither reads a node: the check runs over the schema and never over
+extracted data, where an open-world inference would invent the missing spans the markup layer
+exists to refuse.
+
 ## Merging several packs
 
 `load(*paths)` merges in the order given: prefix maps are merged with the later pack winning a

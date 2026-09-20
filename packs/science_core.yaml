@@ -1,0 +1,305 @@
+# The scientific contract every architecture under `architectures/` is built on: a
+# claim, who takes what position on it, what argument that position rests on, what kind
+# of ground the argument is, and which computation produced the number.
+#
+# It carries no subject matter. There is no method, no reagent, no model architecture
+# here -- those belong to a pack of the field being read, loaded beside this one:
+#
+#   schema: [science_core, ml_paper]
+#
+# Identities. Class IRIs are the real ones: ECO, BFO, IAO, OBI, SIO and EVI publish
+# them and they are written out here unchanged, because a label is not an identity and
+# renaming an imported term is how a corpus stops being comparable with anybody else's.
+# Relation IRIs are local (`atlas:`) with the external property named under `mappings`.
+# That is deliberate and it is the honest state: the class IRIs were checked against
+# the published ontologies, the SEPIO LinkML slot URIs were not pinned here, and
+# minting a plausible-looking IRI for a slot nobody verified would be worse than saying
+# so. Pinning them is a change to this file and to nothing else.
+#
+# Disjointness is declared where the bridge is easy to get wrong: a document describing
+# a procedure is not the procedure being carried out, and neither is a sample. Those
+# three axioms are what `formal_check` has to work with, and what stops a pack from
+# quietly deciding that a file is an experiment.
+
+prefixes:
+  atlas: https://w3id.org/atlas-of-science/core#
+  obo: http://purl.obolibrary.org/obo/
+  sio: http://semanticscience.org/resource/
+  evi: https://w3id.org/EVI#
+  sepio: https://w3id.org/sepio-framework/sepio-linkml/
+  prov: http://www.w3.org/ns/prov#
+  skos: http://www.w3.org/2004/02/skos/core#
+
+types:
+  # ---- what there is ------------------------------------------------------------
+  - name: Entity
+    iri: obo:BFO_0000001
+    description: Anything the corpus talks about, before it is said what kind of thing it is.
+    fields: [name, definition]
+    label_field: name
+
+  - name: MaterialEntity
+    iri: obo:BFO_0000040
+    parent: Entity
+    disjoint_with: [Process, InformationEntity]
+    description: "A physical thing that took part in the work: a sample, an instrument, a substance."
+    fields: [name, definition]
+    label_field: name
+
+  - name: Process
+    iri: obo:BFO_0000015
+    parent: Entity
+    disjoint_with: [MaterialEntity, InformationEntity]
+    description: Something that happened over time, as opposed to the description of it.
+    fields: [name, definition]
+    label_field: name
+
+  - name: InformationEntity
+    iri: obo:IAO_0000030
+    parent: Entity
+    disjoint_with: [MaterialEntity, Process]
+    description: "Content that is about something else: a description, a plan, a record, a claim."
+    fields: [name, definition]
+    label_field: name
+
+  - name: Quality
+    iri: obo:BFO_0000019
+    parent: Entity
+    description: A property of something, distinct from the number written down for it.
+    fields: [name, definition]
+    label_field: name
+
+  # ---- the record of the work ---------------------------------------------------
+  - name: Document
+    iri: obo:IAO_0000310
+    parent: InformationEntity
+    description: A paper, a report, a protocol as written; the thing that was read.
+    fields: [title, identifier, definition]
+    label_field: title
+
+  - name: Study
+    iri: obo:OBI_0000066
+    parent: Process
+    description: One investigation as it was actually carried out.
+    fields: [name, design, definition]
+    label_field: name
+
+  - name: Context
+    iri: atlas:Context
+    parent: InformationEntity
+    description: The conditions a result was obtained under, as a thing that can be compared.
+    fields: [description, conditions, definition]
+    label_field: description
+
+  - name: StudyResult
+    iri: sepio:StudyResult
+    parent: InformationEntity
+    description: One measured outcome, with its value, its unit and the conditions it holds under.
+    fields: [statement, value, unit, conditions, definition]
+    label_field: statement
+
+  # ---- what is claimed about it -------------------------------------------------
+  - name: Proposition
+    iri: sepio:Proposition
+    parent: InformationEntity
+    description: What is being claimed, independently of who claims it or how strongly.
+    fields: [expression, subject_term, predicate_term, object_term, qualifier, definition]
+    label_field: expression
+
+  - name: Statement
+    iri: sepio:Statement
+    parent: InformationEntity
+    description: One party's position on a proposition, with a direction and a strength.
+    fields: [text, direction, strength, definition]
+    label_field: text
+
+  - name: EvidenceLine
+    iri: sepio:EvidenceLine
+    parent: InformationEntity
+    description: One argument for or against a proposition, made of the results it rests on.
+    fields: [summary, direction, strength, definition]
+    label_field: summary
+
+  - name: EvidenceType
+    iri: obo:ECO_0000000
+    parent: InformationEntity
+    description: What kind of ground an argument is, as a term of a controlled vocabulary.
+    fields: [code, label, definition]
+    label_field: label
+
+  - name: AssertionMethod
+    iri: obo:ECO_0000217
+    parent: InformationEntity
+    description: How the record was made, kept apart from what the science rests on.
+    fields: [code, label, definition]
+    label_field: label
+
+  - name: Contribution
+    iri: sepio:Contribution
+    parent: InformationEntity
+    description: "Who did what to this record: extracted it, assessed it, corrected it."
+    fields: [contributor, activity_type, definition]
+    label_field: contributor
+
+  # ---- what it can be recomputed from -------------------------------------------
+  - name: Dataset
+    iri: evi:Dataset
+    parent: InformationEntity
+    description: A body of data a result was computed from, at a stated version.
+    fields: [name, version, definition]
+    label_field: name
+
+  - name: Software
+    iri: evi:Software
+    parent: InformationEntity
+    description: Code a result was computed with, at a stated version.
+    fields: [name, version, definition]
+    label_field: name
+
+  - name: Computation
+    iri: evi:Computation
+    parent: Process
+    description: One run that produced a result from data and code.
+    fields: [name, version, definition]
+    label_field: name
+
+predicates:
+  # ---- the argument -------------------------------------------------------------
+  - name: states
+    iri: atlas:states
+    domain: Statement
+    range: Proposition
+    mappings: [sepio:proposition]
+    description: The statement takes a position on this proposition.
+
+  - name: has_evidence_line
+    iri: atlas:hasEvidenceLine
+    domain: Statement
+    range: EvidenceLine
+    mappings: [sepio:has_evidence_lines]
+    description: The position is argued along this line.
+
+  - name: supports
+    iri: atlas:supports
+    domain: EvidenceLine
+    range: Proposition
+    mappings: [evi:directlySupports, sio:SIO_000773]
+    description: The line of argument is for the proposition.
+
+  - name: disputes
+    iri: atlas:disputes
+    domain: EvidenceLine
+    range: Proposition
+    mappings: [evi:challenges]
+    description: The line of argument is against the proposition.
+
+  - name: rests_on
+    iri: atlas:restsOn
+    domain: EvidenceLine
+    range: StudyResult
+    description: The argument is made of this result.
+
+  - name: evidence_type
+    iri: atlas:evidenceType
+    domain: EvidenceLine
+    range: EvidenceType
+    description: What kind of ground this argument is.
+
+  - name: asserted_by
+    iri: atlas:assertedBy
+    domain: Statement
+    range: Contribution
+    mappings: [prov:wasAttributedTo]
+    description: Who put this position on the record.
+
+  - name: assertion_method
+    iri: atlas:assertionMethod
+    domain: Contribution
+    range: AssertionMethod
+    description: How the record was made, which is not what the science rests on.
+
+  # ---- the work -----------------------------------------------------------------
+  - name: produced_by
+    iri: atlas:producedBy
+    domain: StudyResult
+    range: Study
+    mappings: [prov:wasGeneratedBy]
+    description: The result came out of this investigation.
+
+  - name: observed_under
+    iri: atlas:observedUnder
+    domain: StudyResult
+    range: Context
+    description: The result holds under these conditions and is not known to hold elsewhere.
+
+  - name: involves
+    iri: atlas:involves
+    domain: Study
+    range: Entity
+    mappings: [obo:OBI_0000293]
+    description: The investigation was carried out on, or with, this thing.
+
+  - name: reported_in
+    iri: atlas:reportedIn
+    domain: Study
+    range: Document
+    description: The investigation is written up here.
+
+  - name: about
+    iri: atlas:about
+    domain: Proposition
+    range: Entity
+    mappings: [sio:SIO_000332]
+    description: What the claim is about.
+
+  - name: part_of
+    iri: atlas:partOf
+    domain: Entity
+    range: Entity
+    mappings: [sio:SIO_000068]
+    characteristics: [transitive]
+    description: The thing is a part of the other thing, in the same sense throughout.
+
+  - name: has_part
+    iri: atlas:hasPart
+    domain: Entity
+    range: Entity
+    mappings: [sio:SIO_000028]
+    inverse_of: part_of
+    description: The converse of part_of, so a pack states the pair once.
+
+  - name: comparable_with
+    iri: atlas:comparableWith
+    domain: Context
+    range: Context
+    characteristics: [symmetric]
+    description: The two sets of conditions were checked and found comparable.
+
+  # ---- what it can be recomputed from -------------------------------------------
+  - name: derived_from
+    iri: atlas:derivedFrom
+    domain: StudyResult
+    range: Computation
+    mappings: [evi:derivedFrom]
+    description: The result is the output of this computation.
+
+  - name: used_dataset
+    iri: atlas:usedDataset
+    domain: Computation
+    range: Dataset
+    mappings: [evi:usedDataset]
+    description: The computation read this data.
+
+  - name: used_software
+    iri: atlas:usedSoftware
+    domain: Computation
+    range: Software
+    mappings: [evi:usedSoftware]
+    description: The computation ran this code.
+
+  - name: depends_on
+    iri: atlas:dependsOn
+    domain: Computation
+    range: Computation
+    characteristics: [transitive]
+    description: The computation consumed the output of the other one.

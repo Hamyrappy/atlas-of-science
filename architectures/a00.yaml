@@ -1,0 +1,63 @@
+# Architecture 0 -- the control.
+#
+# Sources, a fixed profile, extraction bound to quotes, a graph, a mandatory traversal,
+# an answer. Nothing else: no position, no line of argument, no kind of evidence, no
+# computation behind a number. It is here to be run beside the others on the same
+# corpus, because "the argument layer helped" is a claim that needs something to be
+# measured against, and a control that shares the parser, the extractor and the walk
+# isolates the one thing under test.
+#
+# Run it:
+#   atlas run architectures/a00.yaml corpus/*.pdf --store store/
+#   atlas ask architectures/a00.yaml "which methods were evaluated on that data?" \
+#       --store store/
+
+variant:
+  id: a00
+  number: 0
+  title: Graph control
+  summary: >-
+    A fixed annotation profile, a typed graph and a mandatory traversal, with none of
+    the argument layer. The baseline the other architectures are measured against.
+  mechanism: >-
+    Extraction against a fixed six-type profile, relations placed against the same
+    quotes, and a bounded typed walk from the ranked seeds. No positions, no evidence
+    lines, no computational lineage: what is stored is what the text says, not who
+    claims it or what it rests on.
+  family: typed traversal
+  optimises: being comparable with the others, not being good
+  cost: >-
+    Cannot answer who disagrees, under what conditions a result holds, or what would
+    change if a dataset were retracted; a re-extraction has no judgement to land under.
+  needs: [model]
+  scores: {relevance: 40, novelty: 15, prospect: 30, total: 31}
+  questions:
+    - Which methods were applied to this task?
+    - Which measures was this method evaluated by?
+    - Which terms does this corpus use for the same thing?
+  differs:
+    a04: >-
+      No induction and no map: the profile is fixed, so a concept the corpus keeps
+      using that the profile has no word for is simply not marked up.
+    a18: >-
+      The walk is a bounded neighbourhood, not a diffusion: a study connected by three
+      indirect hops is out of reach however strongly the graph associates it.
+  spec: docs/architectures/00-graph-control.md
+
+schema: [scierc]
+
+steps:
+  - ingest_pdf
+  - {extract_llm: {segment: page}}
+  - relocate
+  - validate
+  - {relate_llm: {segment: page}}
+  - relate
+  - {assert: {agent: run}}
+  - index_nodes
+
+ask:
+  - index_nodes
+  - retrieve
+  - {graph_expand: {depth: 2, limit: 40}}
+  - graph_answer

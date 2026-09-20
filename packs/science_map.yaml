@@ -1,0 +1,60 @@
+# The map layer: topics, and the passages a salience pass kept.
+#
+# Load it beside `science_core.yaml`, whose `InformationEntity` and `Entity` it builds
+# on and which it does not repeat:
+#
+#   schema: [science_core, science_map]
+#
+# The one thing this pack exists to enforce is a separation. A topic is not a class.
+# Two things the corpus talks about in the same paragraphs belong to one topic; that
+# says they are discussed together and says nothing about what either of them is. The
+# map layer is therefore its own type with its own identity, related to entities by
+# `in_topic` and never by `parent`, so that nothing downstream can mistake a cluster
+# for a definition. `induce`/`promote` is the only route from the first to the second,
+# and it refuses a topic whose members are of mixed kinds.
+#
+# `Passage` is what a salience pass keeps: a region of a source that carries something
+# worth extracting from, under a category the run named. The categories are not here --
+# they are a configuration, because which distinctions matter is a property of the
+# corpus and of the question, not of this vocabulary.
+
+prefixes:
+  atlas: https://w3id.org/atlas-of-science/map#
+  skos: http://www.w3.org/2004/02/skos/core#
+
+types:
+  - name: Topic
+    iri: atlas:Topic
+    parent: InformationEntity
+    mappings: [skos:Concept]
+    description: A group of things the corpus discusses together, which is not a class of them.
+    fields: [label, scope, definition]
+    label_field: label
+
+  - name: Passage
+    iri: atlas:Passage
+    parent: InformationEntity
+    description: A region of a source a salience pass kept, under the category it kept it for.
+    fields: [category, summary, definition]
+    label_field: summary
+
+predicates:
+  - name: in_topic
+    iri: atlas:inTopic
+    domain: Entity
+    range: Topic
+    description: The thing is discussed under this topic, which says nothing about what it is.
+
+  - name: narrower
+    iri: atlas:narrower
+    domain: Topic
+    range: Topic
+    mappings: [skos:narrower]
+    characteristics: [transitive]
+    description: A finer topic within a broader one; still a map, still not a hierarchy of classes.
+
+  - name: mentions
+    iri: atlas:mentions
+    domain: Passage
+    range: Entity
+    description: The kept passage talks about this thing.

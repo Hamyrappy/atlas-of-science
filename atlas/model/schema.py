@@ -29,7 +29,13 @@ class FieldDef(Frozen):
 
 
 class TypeDef(Frozen):
-    """One node type: what it is called here, what it is, and what it says."""
+    """One node type: what it is called here, what it is, and what it says.
+
+    `disjoint_with` names the types nothing may be both of. It is an axiom and not a
+    hint: a pack that declares a type disjoint from one of its own ancestors has
+    declared a type nothing can satisfy, and a step that checks the ontology before a
+    release says so rather than waiting for the first node to be refused.
+    """
 
     name: str
     iri: str | None = None
@@ -37,17 +43,38 @@ class TypeDef(Frozen):
     fields: tuple[FieldDef, ...] = ()
     label_field: str | None = None  # which of the fields names the thing, for a reader
     mappings: tuple[str, ...] = ()
+    disjoint_with: tuple[str, ...] = ()
     description: str = ""
 
 
+TRANSITIVE = "transitive"
+SYMMETRIC = "symmetric"
+CHARACTERISTICS = (TRANSITIVE, SYMMETRIC)
+"""What a pack may say about how a relation behaves, and the whole list of it.
+
+Deliberately two: these are the only two a materialisation can close over without
+either a reasoner or a decision about what to do when the closure stops terminating.
+A pack that needs more is asking for a profile this library does not implement, and
+saying so here is better than accepting the word and ignoring it.
+"""
+
+
 class PredicateDef(Frozen):
-    """One relation type, with the node types it may connect."""
+    """One relation type, with the node types it may connect and how it behaves.
+
+    `characteristics` and `inverse_of` are the executable part of an RBox: what a
+    materialisation may derive from an asserted link without asking anybody. Both are
+    declared by the pack, so the core never learns that some particular relation is
+    transitive -- only that a relation may say it is.
+    """
 
     name: str
     domain: str
     range: str
     iri: str | None = None
     mappings: tuple[str, ...] = ()
+    characteristics: tuple[str, ...] = ()
+    inverse_of: str | None = None
     description: str = ""
 
 
@@ -153,6 +180,46 @@ class Schema(Frozen):
     def is_a(self, term: str, expected: str) -> bool:
         """Whether a type is the expected type or descends from it."""
         return any(self._names(expected, t.name, t.iri) for t in self.ancestry(term))
+
+    def disjoint(self, term: str, other: str) -> bool:
+        """Whether the pack forbids anything from being both of these types.
+
+        Disjointness is inherited downwards: a type declared disjoint from one is
+        disjoint from everything under it, which is what makes the axiom worth
+        declaring once on the pair of roots rather than on every pair of leaves.
+        """
+        return any(
+            self.is_a(other, named)
+            for ancestor in self.ancestry(term)
+            for named in ancestor.disjoint_with
+        ) or any(
+            self.is_a(term, named)
+            for ancestor in self.ancestry(other)
+            for named in ancestor.disjoint_with
+        )
+
+    def with_characteristic(self, characteristic: str) -> tuple[PredicateDef, ...]:
+        """The predicates a pack declared to behave this way; unknown words match nothing."""
+        return tuple(p for p in self.predicates if characteristic in p.characteristics)
+
+    def inverse(self, term: str) -> PredicateDef | None:
+        """The predicate declared as this one's inverse, from either side of the pair.
+
+        A pack states the pair once, on whichever of the two it was more natural to
+        write it on, and both directions answer -- otherwise half of every inverse
+        would be derivable and the other half silently not.
+        """
+        predicate = self.find_predicate(term)
+        if predicate is None:
+            return None
+        if predicate.inverse_of:
+            return self.find_predicate(predicate.inverse_of)
+        return next(
+            (p for p in self.predicates if p.inverse_of and self._names(p.inverse_of,
+                                                                       predicate.name,
+                                                                       predicate.iri)),
+            None,
+        )
 
     def _names(self, term: str, name: str, iri: str | None) -> bool:
         """Whether a term refers to a definition: its local name, or its identity."""

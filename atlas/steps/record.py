@@ -43,7 +43,14 @@ class AssertOptions(Frozen):
 @register("assert", requires=("sources", "nodes", "schema", "at", "store"),
           produces=("store", "assertions", "agent"), options=AssertOptions)
 def record(state: State, options: AssertOptions) -> State:
-    """Assert every node of the run, into the store it carries or into a new one in memory."""
+    """Assert every node and link of the run, into the store it carries or a new one in memory.
+
+    Links are read out of the state rather than required from it, so a configuration
+    that extracts no relation keeps working unchanged: a run without them asserts its
+    nodes as it always did. A link is asserted exactly as a node is -- same agent, same
+    moment, same append-only log -- because a relation is a claim about the world and
+    is superseded the same way a claim about a thing is.
+    """
     store = state.get("store") or open_store("memory")
     at: str = state["at"]
     # A run is identified by the moment it ran; a person or a model by the label they are
@@ -54,8 +61,8 @@ def record(state: State, options: AssertOptions) -> State:
     for source in state["sources"]:
         store.add_source(source)
     assertions = tuple(
-        Assertion(id=_assertion_id(actor.id, at, node.id), agent=actor, at=at, target=node)
-        for node in state["nodes"]
+        Assertion(id=_assertion_id(actor.id, at, target.id), agent=actor, at=at, target=target)
+        for target in (*state["nodes"], *state.get("links", ()))
     )
     for assertion in assertions:
         store.assert_(assertion)

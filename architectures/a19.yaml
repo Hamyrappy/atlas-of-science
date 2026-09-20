@@ -1,0 +1,71 @@
+# Architecture 19 -- explanatory paths under a context budget.
+#
+# What explains a connection is an ordered chain, not a neighbourhood. This enumerates
+# them, prunes the redundant ones by content, and never prunes the one that argues the
+# other way.
+#
+#   atlas ask architectures/a19.yaml "what chain explains the link between these two?" \
+#       --store store/
+
+variant:
+  id: a19
+  number: 19
+  title: Explanatory paths with a preserved counter-path
+  summary: >-
+    Bounded simple chains between the things a question named, scored by a flow that
+    decays with each hop, deduplicated by content rather than by wording, and pruned to
+    a budget -- with every counter-path put back.
+  mechanism: >-
+    Redundancy is judged by signature: the nodes and predicates crossed in order, so two
+    chains over different studies are two paths however alike they read. Pruning happens
+    after deduplication, so a counter-path is never kept twice, and the counter-paths the
+    budget dropped are restored with the reason recorded -- because they are rare by
+    nature and score badly by construction, and losing them would make a pruned search
+    systematically more confident than an unpruned one.
+  family: path selection
+  optimises: a compact explanation, without becoming more confident by being compact
+  cost: >-
+    Enumeration is exponential in depth and is bounded by candidates rather than by
+    cleverness; the flow model is a monotone scoring, not a published algorithm.
+  needs: [model]
+  scores: {relevance: 90, novelty: 89, prospect: 91, total: 90}
+  questions:
+    - What chain explains the link between these two results?
+    - Which transitions are about the subject matter and which are associative?
+    - What survives a strict context limit?
+  differs:
+    a18: >-
+      Specific ordered chains are selected, not a ranked region.
+    a16: >-
+      Paths rather than a connected region, and no prize model: what is optimised is the
+      explanation, not the budget.
+  spec: docs/architectures/19-explanatory-paths.md
+
+schema: [science_core, scierc]
+
+steps:
+  - ingest_pdf
+  - {extract_llm: {segment: page}}
+  - relocate
+  - validate
+  - {relate_llm: {segment: page}}
+  - relate
+  - {assert: {agent: run}}
+  - index_nodes
+
+ask:
+  - index_nodes
+  - {retrieve: {limit: 6}}
+  - select_paths:
+      depth: 4
+      keep: 8
+      candidates: 60
+      decay: 0.8
+      weights: {mentions: 0.2}
+      expand:
+        depth: 2
+        limit: 60
+        supports: [supports]
+        opposes: [disputes]
+  - graph_answer
+  - check_answer

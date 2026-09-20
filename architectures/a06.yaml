@@ -1,0 +1,73 @@
+# Architecture 6 -- the pipeline with a critic.
+#
+# The same extraction, checked before it is asserted, repaired at most twice, and
+# quarantined when it survives that. Opposed positions are classified rather than
+# resolved, and the answer itself is reviewed against the package it was written from.
+#
+#   atlas run architectures/a06.yaml corpus/*.pdf --store store/
+#   atlas ask architectures/a06.yaml "is this a disagreement or a mistake?" --store store/
+
+variant:
+  id: a06
+  number: 6
+  title: Critic, bounded repair and conflict review
+  summary: >-
+    Extraction checked against the text it came from, with a budget for putting it
+    right, a quarantine for what survives that, and a review of the answer against its
+    own evidence package.
+  mechanism: >-
+    Deterministic critics compare each node with its own span and type -- a field that
+    is nowhere in the quote, nothing in the field that names it, evidence too thin to
+    stand on, a negation marker beside a claim that reads as a finding. Repairable
+    findings go back to the model at most twice; what is still wrong is quarantined,
+    never asserted. Opposed positions are classified as a matter of conditions, of
+    extraction, of genuine disagreement or of ambiguity, with disagreement as the
+    default that has to be explained away. The answer is then reviewed for the side it
+    left out.
+  family: typed traversal with review
+  optimises: the cost of a wrong record, and knowing which errors were which
+  cost: >-
+    Up to two extra model calls per questionable node, and correlated errors: a critic
+    from the same model family misses the mistakes that model reliably makes.
+  needs: [model]
+  scores: {relevance: 89, novelty: 91, prospect: 93, total: 91}
+  questions:
+    - Why was this statement corrected, and by what?
+    - Is this a scientific conflict or an extraction error?
+    - Which side did the answer leave out?
+  differs:
+    a05: >-
+      What is checked is the extraction rather than the science: the subject is the
+      record's own reliability.
+    a20: >-
+      The agents improve how knowledge is built; a plan of graph operators improves how
+      a question is answered over what was already built.
+  spec: docs/architectures/06-critic-pipeline.md
+
+schema: [science_core, scierc]
+
+steps:
+  - ingest_pdf
+  - {extract_llm: {segment: page}}
+  - relocate
+  - critique:
+      grounded_fields: [statement, text, summary, name]
+      min_quote: 12
+  - {repair_llm: {rounds: 2, segment: page}}
+  - relocate
+  - validate
+  - {relate_llm: {segment: page}}
+  - relate
+  - {assert: {agent: run}}
+  - index_nodes
+
+ask:
+  - index_nodes
+  - retrieve
+  - {graph_expand: {depth: 3, limit: 60, supports: [supports], opposes: [disputes]}}
+  - reconcile:
+      supports: [supports]
+      opposes: [disputes]
+      conditions: [observed_under]
+  - graph_answer
+  - check_answer

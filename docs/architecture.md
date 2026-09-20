@@ -127,47 +127,202 @@ recoverable from anything else in the state.
 
 ## The steps that ship
 
+Forty-five of them, in seven groups. A group is not a concept in the code -- the registry is
+flat and the pipeline resolves a name -- it is how a reader finds the one they want.
+
+**Reading a source.**
+
 | Name | Reads from the state | Adds | Module |
 |---|---|---|---|
 | `ingest_pdf` | `inputs` | `sources` | `atlas/steps/ingest_pdf.py` |
 | `ingest_text` | `inputs` | `sources` | `atlas/steps/ingest_text.py` |
 | `ingest_markdown` | `inputs` | `sources` | `atlas/steps/markdown.py` |
+| `ingest_table` | `inputs` | `sources` | `atlas/steps/ingest_table.py` |
 | `render_markdown` | `sources` | `renderings` | `atlas/steps/markdown.py` |
+
+**Marking it up.**
+
+| Name | Reads from the state | Adds | Module |
+|---|---|---|---|
 | `extract_llm` | `sources`, `schema`, `client` | `statements`, `malformed`, `tokens`, `cached_replies` | `atlas/steps/extract_llm.py` |
+| `salience_llm` | `sources`, `client` | `statements`, `kept`, `tokens`, `cached_replies` | `atlas/steps/salience.py` |
 | `relocate` | `sources`, `statements`, `schema` | `nodes`, `unplaced`, `needs_review` | `atlas/steps/relocate.py` |
+| `relate_llm` | `sources`, `nodes`, `schema`, `client` | `relations`, `malformed_relations`, `tokens`, `cached_replies` | `atlas/steps/relate_llm.py` |
+| `relate` | `sources`, `nodes`, `relations`, `schema` | `links`, `unrelated`, `relation_violations` | `atlas/steps/relate.py` |
+| `map_rows` | `sources`, `schema` | `nodes`, `links`, `unmapped`, `mapping_violations` | `atlas/steps/map_rows.py` |
 | `validate` | `nodes`, `schema` | `nodes`, `violations` | `atlas/steps/validate.py` |
+| `critique` | `nodes`, `schema` | `findings` | `atlas/steps/critique.py` |
+| `repair_llm` | `nodes`, `findings`, `sources`, `schema`, `client` | `statements`, `quarantined`, `repaired` | `atlas/steps/repair.py` |
 | `assert` | `sources`, `nodes`, `schema`, `at`, `store` | `store`, `assertions`, `agent` | `atlas/steps/record.py` |
+
+**Growing the vocabulary.**
+
+| Name | Reads from the state | Adds | Module |
+|---|---|---|---|
+| `induce` | `statements`, `schema`, `sources` | `candidates` | `atlas/steps/induce.py` |
+| `define_llm` | `candidates`, `client` | `candidates`, `defined` | `atlas/steps/define_llm.py` |
+| `promote` | `candidates`, `schema` | `promoted`, `refused`, `proposal` | `atlas/steps/induce.py` |
+| `formal_check` | `schema` | `formal`, `problems` | `atlas/steps/formal_check.py` |
+| `entail` | `store`, `schema` | `derived`, `derivations`, `closure`, `closure_finished` | `atlas/steps/entail.py` |
+| `compile_units` | `store`, `schema` | `units`, `provable`, `unsupported_units` | `atlas/steps/units.py` |
+
+**Finding where to start.**
+
+| Name | Reads from the state | Adds | Module |
+|---|---|---|---|
 | `index_nodes` | `store` | `index` | `atlas/steps/index_nodes.py` |
 | `retrieve` | `store`, `index`, `question` | `hits` | `atlas/steps/retrieve.py` |
-| `answer` | `hits`, `question`, `client`, `schema` | `answer`, `uncited` | `atlas/steps/answer.py` |
+| `retrieve_dual` | `store`, `index`, `topics`, `question` | `hits` | `atlas/steps/topics.py` |
+| `route` | `question` | `route`, `route_reason` | `atlas/steps/route.py` |
+| `retrieve_routed` | `store`, `index`, `question`, `route` | `hits`, `route_capped` | `atlas/steps/route.py` |
+| `topics` | `store` | `topics`, `mixed_topics` | `atlas/steps/topics.py` |
+| `communities` | `store` | `communities` | `atlas/steps/communities.py` |
 
+**Building the evidence package.**
+
+| Name | Reads from the state | Adds | Module |
+|---|---|---|---|
+| `graph_expand` | `store`, `hits` | `bundle` | `atlas/steps/graph_expand.py` |
+| `graph_expand_sql` | `store`, `hits` | `bundle` | `atlas/steps/graph_sql.py` |
+| `graph_expand_entailed` | `store`, `hits`, `derived` | `bundle` | `atlas/steps/entail.py` |
+| `select_subgraph` | `store`, `hits` | `bundle`, `selection` | `atlas/steps/subgraph.py` |
+| `select_paths` | `store`, `hits` | `bundle`, `paths` | `atlas/steps/paths.py` |
+| `diffuse` | `store`, `hits` | `bundle`, `ranked` | `atlas/steps/diffuse.py` |
+| `execute_plan` | `store`, `schema` | `bundle`, `trace`, `answer_count` | `atlas/steps/plan.py` |
+| `mark_units` | `bundle`, `units` | `bundle` | `atlas/steps/units.py` |
+
+**Reading the package.**
+
+| Name | Reads from the state | Adds | Module |
+|---|---|---|---|
+| `compare` | `bundle`, `store` | `comparisons`, `comparable` | `atlas/steps/compare.py` |
+| `reconcile` | `bundle`, `store` | `conflicts`, `disagreements` | `atlas/steps/reconcile.py` |
+| `lineage` | `store`, `cause` | `affected`, `lineage_partial` | `atlas/steps/lineage.py` |
+| `align` | `store` | `alignment`, `discrepancies` | `atlas/steps/align.py` |
+| `count_independence` | `bundle`, `origins` | `independence` | `atlas/steps/federate.py` |
+| `federate` | — | `store`, `synced`, `held`, `origins` | `atlas/steps/federate.py` |
+
+**Answering.**
+
+| Name | Reads from the state | Adds | Module |
+|---|---|---|---|
+| `answer` | `hits`, `question`, `client`, `schema` | `answer`, `uncited` | `atlas/steps/answer.py` |
+| `graph_answer` | `bundle`, `question`, `client`, `schema` | `answer`, `uncited`, `gap` | `atlas/steps/graph_answer.py` |
+| `check_answer` | `answer`, `bundle` | `review`, `omissions` | `atlas/steps/check_answer.py` |
 What each may be given under its name in a configuration, copied from the message the library
 itself prints when an option is wrong -- anything not on this line is refused as the file is read:
 
 | Name | Options |
 |---|---|
-| `ingest_pdf` | no options |
-| `ingest_text` | `split: Literal['blank-line', 'whole', 'window'] = 'blank-line', window: int = 2000` |
+| `align` | plan: str, run: str, asserted: tuple[str, ...] = (), order_field: str = 'order', threshold: float = 0.5 |
+| `answer` | system: str \| None = None |
+| `assert` | agent: Literal['human', 'model', 'run'] = 'run', label: str = '' |
+| `check_answer` | no options |
+| `communities` | follow: tuple[str, ...] = (), min_size: int = 2, rounds: int = 8, members_in_report: int = 5 |
+| `compare` | type: str, conditions: tuple[str, ...] = (), fields: tuple[str, ...] = ('conditions',), value_field: str = 'value', unit_field: str = 'unit', comparable: tuple[str, ...] = (), units: dict[str, float] = {} |
+| `compile_units` | type: str = 'SemanticUnit', kinds: tuple[str, ...] = (), quantifiers: tuple[str, ...] = (), modalities: tuple[str, ...] = (), polarities: tuple[str, ...] = (), kind_field: str = 'kind', quantifier_field: str = 'quantifier', polarity_field: str = 'polarity', modality_field: str = 'modality', scope_field: str = 'scope', expression_field: str = 'expression' |
+| `count_independence` | no options |
+| `critique` | negations: tuple[str, ...] = (), min_quote: int = 12, grounded_fields: tuple[str, ...] = () |
+| `define_llm` | redefine: bool = False |
+| `diffuse` | damping: float = 0.85, rounds: int = 30, limit: int = 12, depth: int = 3, weights: dict[str, float] = {}, expand: GraphExpandOptions = GraphExpandOptions(depth=2, limit=60, follow=(), supports=(), opposes=()) |
+| `entail` | premises: tuple[str, ...] = (), rounds: int = 8, assert_derived: bool = False |
+| `execute_plan` | plan: tuple[atlas.steps.plan.Operator, ...] = (), limit: int = 500, expand: GraphExpandOptions = GraphExpandOptions(depth=2, limit=60, follow=(), supports=(), opposes=()) |
+| `extract_llm` | segment: str = 'segment' |
+| `federate` | registries: dict[str, Any] = {}, versions: tuple[str, ...] = (), into: str = 'memory' |
+| `formal_check` | budget: int = 2000, strict: bool = True |
+| `graph_answer` | system: str \| None = None |
+| `graph_expand` | depth: int = 2, limit: int = 60, follow: tuple[str, ...] = (), supports: tuple[str, ...] = (), opposes: tuple[str, ...] = () |
+| `graph_expand_entailed` | depth: int = 2, limit: int = 60, follow: tuple[str, ...] = (), supports: tuple[str, ...] = (), opposes: tuple[str, ...] = () |
+| `graph_expand_sql` | depth: int = 2, limit: int = 60, follow: tuple[str, ...] = (), supports: tuple[str, ...] = (), opposes: tuple[str, ...] = () |
+| `index_nodes` | name: str = 'index.json', rebuild: bool = False |
+| `induce` | similarity: float = 0.6, family_field: str = '', registry: str = 'candidates.json', examples: int = 3 |
 | `ingest_markdown` | no options |
-| `render_markdown` | `out: str` (required) |
-| `extract_llm` | `segment: str = 'segment'` |
+| `ingest_pdf` | no options |
+| `ingest_table` | delimiter: str = ',', encoding: str = 'utf-8' |
+| `ingest_text` | split: Literal['blank-line', 'whole', 'window'] = 'blank-line', window: int = 2000 |
+| `lineage` | follow: tuple[str, ...], depth: int = 6, limit: int = 200, upstream: bool = True |
+| `map_rows` | nodes: dict[str, atlas.steps.map_rows.NodeMapping] = {}, links: tuple[atlas.steps.map_rows.LinkMapping, ...] = () |
+| `mark_units` | no options |
+| `promote` | min_support: int = 3, min_rounds: int = 2, reuse: float = 0.75, require_definition: bool = True, parent: str = '', out: str = 'proposal.yaml' |
+| `reconcile` | supports: tuple[str, ...], opposes: tuple[str, ...], conditions: tuple[str, ...] = (), fields: tuple[str, ...] = ('conditions',) |
+| `relate` | no options |
+| `relate_llm` | segment: str = 'segment' |
 | `relocate` | no options |
+| `render_markdown` | out: str |
+| `repair_llm` | rounds: int = 2, segment: str = 'segment' |
+| `retrieve` | limit: int = 8 |
+| `retrieve_dual` | limit: int = 8, topics: int = 2, weight: float = 0.5 |
+| `retrieve_routed` | overview: str = 'overview', limit: int = 8, communities: int = 2, cap: int = 300 |
+| `route` | routes: tuple[str, ...] = ('fact', 'overview'), markers: dict[str, tuple[str, ...]] = {}, default: str = 'fact', ask_model: bool = False |
+| `salience_llm` | categories: tuple[str, ...], type: str, field: str = 'category', summary_field: str = 'summary', segment: str = 'segment' |
+| `select_paths` | depth: int = 4, keep: int = 8, candidates: int = 60, decay: float = 0.8, weights: dict[str, float] = {}, expand: GraphExpandOptions = GraphExpandOptions(depth=2, limit=60, follow=(), supports=(), opposes=()) |
+| `select_subgraph` | cost: float = 1.0, limit: int = 30, whole: tuple[str, ...] = (), parts: tuple[str, ...] = (), expand: GraphExpandOptions = GraphExpandOptions(depth=2, limit=60, follow=(), supports=(), opposes=()) |
+| `topics` | follow: tuple[str, ...] = (), min_size: int = 2, terms: int = 5 |
 | `validate` | no options |
-| `assert` | `agent: Literal['human', 'model', 'run'] = 'run', label: str = ''` |
-| `index_nodes` | `name: str = 'index.json', rebuild: bool = False` |
-| `retrieve` | `limit: int = 8` |
-| `answer` | `system: str \| None = None` |
-
-The first eight are a build: documents in, assertions out. The last three are a question, and run
-over a store that a build filled earlier -- `Pipeline.run_state` with `question` and `client` in the
-state, no inputs and no timestamp to invent. `question` and `client` are produced by no step, which
-is exactly why the order check lets them through: they are the caller's to supply.
 
 `Pipeline.initial` seeds the state with `inputs`, the loaded `schema` and `at`, the one timestamp
 every assertion of the run then carries, the store the configuration named if it named one, plus
-whatever the caller passes as context — the client, a store of its own, a question. Unwritten:
-link extraction, canonicalisation of nodes across sources, evaluation. Each is a step with a name
-that no configuration can yet use.
+whatever the caller passes as context -- the client, a store of its own, a question. `question`,
+`client` and `cause` are produced by no step, which is exactly why the order check lets them
+through: they are the caller's to supply.
+
+Unwritten: canonicalisation of nodes across sources, and an evaluation harness driven by
+competency questions with a dev/test split. Each is a step with a name that no configuration can
+yet use.
+
+## A configuration holds more than one chain
+
+A file names `steps`, the chain that reads sources and writes assertions, and may also name
+`ask`, the chain that answers a question over what that wrote. `Pipeline.from_config(path,
+chain="ask")` reads the second; `atlas run` takes the first and `atlas ask` the second. They are
+two chains over one vocabulary and one store, and splitting them into two files would put the
+pack, the store and the options in two places to be kept in step. A file that does not hold the
+chain it was asked for is refused by name, because a run that silently does nothing is the worst
+of the three outcomes.
+
+## Walking the graph
+
+`atlas/walk.py` makes the three decisions a graph search has to make, once, so that fifteen
+architectures disagree about which walk is worth doing and agree about everything underneath it.
+
+**A link is walked both ways, and the direction is kept.** A relation is asserted one way round
+and a question is not; refusing to walk backwards would make the reachable set depend on how an
+extractor phrased a relation, and forgetting which way it went would let a path claim the relation
+runs the other way. `Edge.forward` travels with every step of every `Walk`.
+
+**Order is total and comes from the data.** Neighbours are ordered by link id, which is a content
+hash, so two runs over one corpus walk in the same order and a budget cuts the same walk at the
+same place.
+
+**A budget that runs out is reported.** `reach` returns `partial`; `walks` returns what it found.
+Neither fills in the rest.
+
+`Adjacency`, `reach`, `walks`, `components` and `weights` are the whole surface. Nothing in the
+module knows a type, a predicate or a schema: restricting a walk is handing it fewer links, which
+is how the module stays free of any vocabulary.
+
+## The evidence package
+
+Every architecture ends in the same object. `Bundle` (`atlas/steps/graph_expand.py`) carries the
+roots it was built around, the nodes and links it holds, the walks that reached them, which
+relations carry a position for and against, which were inferred rather than claimed, why each
+thing is in it, the schema version it was built under, which selection produced it, and whether a
+budget bound it.
+
+Three guarantees hold whichever architecture filled it:
+
+- **It says whether it is grounded.** `grounded` is false when no relation was walked, and
+  `graph_answer` then refuses to write prose and reports a gap instead. That is what stops a graph
+  architecture from quietly decaying into text retrieval with a citation stapled on.
+- **An objection is never dropped for budget.** Relations named under `opposes` are pulled in
+  after the walk, whatever the limit did, together with the node at the other end.
+- **It holds every relation among the nodes it holds**, not only the ones a walk crossed -- a walk
+  records how a node was *first* reached, so a relation between two roots is in nobody's walk.
+
+`expand` is the shared closure and takes an optional `adjacency`, which is how a store that can
+answer a bounded neighbourhood better than by handing over every link (`graph_expand_sql`) and a
+selection that has already decided which part of the graph is in play (`select_subgraph`,
+`select_paths`, `diffuse`, `execute_plan`) reach the same contract by different routes.
 
 ### Where a type that crosses a step boundary lives
 

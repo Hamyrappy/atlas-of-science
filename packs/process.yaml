@@ -1,0 +1,120 @@
+# The process layer: what was planned, what was actually done, under which conditions,
+# and what came out -- including what did not work.
+#
+# Load it beside `science_core.yaml`, whose `Process`, `InformationEntity` and
+# `StudyResult` it extends:
+#
+#   schema: [science_core, process]
+#
+# Two separations are the whole point of this pack, and both of them are places where a
+# flat record silently loses the science.
+#
+# **A plan is not a run.** `Protocol` and `ProtocolStep` are information: what the paper
+# says should happen. `Experiment` and `ExecutionStep` are occurrents: what happened.
+# They have different identities and are related by `realises`, which is asserted when
+# somebody or something has actually matched them up -- never by having the same name.
+# `science_core` declares `InformationEntity` and `Process` disjoint, so this separation
+# is an axiom a formal check can fail on, not a convention.
+#
+# **A negative result is a result.** `NegativeResult` is a subclass of `StudyResult`,
+# beside `PositiveResult`, so it is found by every query that finds results, ranked by
+# every ranking that ranks them and pulled into every evidence package. A schema that
+# modelled outcomes as a boolean on a result would have made "what has been tried and
+# did not work" unanswerable, which is the question this architecture exists for.
+#
+# The REPRODUCE-ME identities are taken from the archived snapshot of that ontology
+# cited in the architecture catalogue. They are the IRIs of that snapshot, which is
+# what is claimed here -- not that the upstream ontology still publishes them all.
+#
+#   https://github.com/sensein/assertion-evidence-paper/blob/main/Data/provenance/reproduce-me.owl
+
+prefixes:
+  atlas: https://w3id.org/atlas-of-science/process#
+  repro: https://w3id.org/reproduceme#
+
+types:
+  - name: Protocol
+    iri: repro:Protocol
+    parent: InformationEntity
+    description: The procedure as written; a description, which is never the doing of it.
+    fields: [name, version, definition]
+    label_field: name
+
+  - name: ProtocolStep
+    iri: atlas:ProtocolStep
+    parent: InformationEntity
+    description: One step of a protocol as planned, in the order the protocol gives it.
+    fields: [name, order, definition]
+    label_field: name
+
+  - name: Experiment
+    iri: repro:Experiment
+    parent: Process
+    description: One carrying-out of a procedure, which happened at a time.
+    fields: [name, version, definition]
+    label_field: name
+
+  - name: ExecutionStep
+    iri: atlas:ExecutionStep
+    parent: Process
+    description: One step as it was actually carried out, in the order it happened.
+    fields: [name, order, definition]
+    label_field: name
+
+  - name: ExperimentalCondition
+    iri: repro:ExperimentalCondition
+    parent: InformationEntity
+    description: One condition a run was carried out under, with its value and its unit.
+    fields: [name, value, unit, definition]
+    label_field: name
+
+  - name: PositiveResult
+    iri: repro:PositiveResult
+    parent: StudyResult
+    description: An outcome in which the effect looked for was found.
+    fields: [statement, value, unit, conditions, definition]
+    label_field: statement
+
+  - name: NegativeResult
+    iri: repro:NegativeResult
+    parent: StudyResult
+    description: An outcome in which the effect looked for was not found, which is a result.
+    fields: [statement, value, unit, conditions, definition]
+    label_field: statement
+
+predicates:
+  - name: follows
+    iri: atlas:follows
+    domain: Experiment
+    range: Protocol
+    description: The run was carried out according to this written procedure.
+
+  - name: planned_step
+    iri: atlas:plannedStep
+    domain: Protocol
+    range: ProtocolStep
+    description: The procedure says this step should happen.
+
+  - name: actual_step
+    iri: atlas:actualStep
+    domain: Experiment
+    range: ExecutionStep
+    description: This step happened during the run.
+
+  - name: realises
+    iri: atlas:realises
+    domain: ExecutionStep
+    range: ProtocolStep
+    description: Somebody matched this step that happened to that step that was planned.
+
+  - name: under_condition
+    iri: atlas:underCondition
+    domain: Experiment
+    range: ExperimentalCondition
+    description: The run was carried out under this condition.
+
+  - name: yielded
+    iri: atlas:yielded
+    domain: Experiment
+    range: StudyResult
+    description: The run produced this outcome, whichever way it came out.

@@ -1,0 +1,63 @@
+# Architecture 13 -- the federation.
+#
+# Several registries publish what they found; this Atlas reads them, checks every record
+# against the source it cites, and counts confirmations over sources rather than over
+# publishers. Worth it only when there really are several independent publishers.
+#
+#   atlas ask architectures/a13.yaml "who independently confirms this?" --store store/
+
+variant:
+  id: a13
+  number: 13
+  title: Federation of registries
+  summary: >-
+    One local snapshot built from several independent registries, with every record
+    checked against the source it cites, and confirmations counted over sources rather
+    than over the publishers that republished them.
+  mechanism: >-
+    `federate` reads each registry, requires the source to have been published with the
+    record, and re-checks every span against it -- the same rule this library applies to
+    its own extraction, applied to somebody else's. A record under a vocabulary nobody
+    has mapped is held rather than dropped, because that is a reason to wait for the
+    mapping. `independence` then counts distinct sources and distinct registries
+    separately and names the sources that arrived twice, so the gap between the two
+    numbers can be explained instead of assumed away.
+  family: federated traversal
+  optimises: not manufacturing consensus out of the topology of who republished what
+  cost: >-
+    Nothing, for a single corpus with a single owner. The machinery only earns its place
+    once there are several publishers who do not share a schema release.
+  needs: []
+  scores: {relevance: 78, novelty: 93, prospect: 93, total: 87}
+  questions:
+    - Which groups independently confirm this result?
+    - Which disagreements are about terminology rather than about the world?
+    - What changed when a new registry was connected?
+  differs:
+    a08: >-
+      The question is not where the graph is executed but who is allowed to publish into
+      it, and on what terms it is accepted.
+    a06: >-
+      What is checked is the provenance of somebody else's record, not the quality of
+      our own extraction.
+  spec: docs/architectures/13-federation.md
+
+schema: [science_core, scierc]
+
+steps:
+  - ingest_pdf
+  - {extract_llm: {segment: page}}
+  - relocate
+  - validate
+  - {relate_llm: {segment: page}}
+  - relate
+  - {assert: {agent: run}}
+  - index_nodes
+
+ask:
+  - federate
+  - index_nodes
+  - retrieve
+  - {graph_expand: {depth: 3, limit: 60, supports: [supports], opposes: [disputes]}}
+  - count_independence
+  - graph_answer

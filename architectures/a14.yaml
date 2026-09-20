@@ -1,0 +1,73 @@
+# Architecture 14 -- the virtual graph over existing tables.
+#
+# A database of results is already structured, and copying it into prose so that a model
+# can extract it back out again introduces errors on purpose. Here a mapping turns rows
+# into the same typed graph everything else produces, bound to verbatim spans of the
+# rendered row.
+#
+#   atlas run architectures/a14.yaml data/results.csv --store store/
+#   atlas ask architectures/a14.yaml "which results came out of the same study?" --store store/
+
+variant:
+  id: a14
+  number: 14
+  title: Mapped graph over existing tables
+  summary: >-
+    Existing tabular data read through a mapping rather than through a language model:
+    rows become typed nodes and relations with real spans, under the same vocabulary and
+    the same evidence package as everything else.
+  mechanism: >-
+    `ingest_table` renders each row once -- `column: value | column: value` -- and that
+    rendering becomes the text layer, so a cell is a verbatim substring and a node built
+    from it is bound by `Span.of` like any other. `map_rows` executes a mapping of
+    columns to types, fields and relations. An empty key never joins: a row that cannot
+    identify a thing produces no node and no relation, because letting it through as the
+    empty string collapses every such row into one node and makes every relation
+    touching it a claim about a thing that does not exist.
+  family: mapped traversal
+  optimises: reading structured data without a round trip through prose
+  cost: >-
+    A mapping to write and keep true. A renamed column or a changed unit is a mapping
+    revision, and syntactically valid SQL that still returns numbers is exactly how that
+    goes unnoticed.
+  needs: []
+  scores: {relevance: 68, novelty: 74, prospect: 82, total: 75}
+  questions:
+    - Which results came out of the same study?
+    - Which rows support a published statement?
+    - What changed between two versions of this table?
+  differs:
+    a08: >-
+      Data stays in the shape it arrived in and is read through a mapping; the other
+      moves it into a store whose reads are queries.
+    a05: >-
+      No model is called at all on the tabular route, so nothing here can hallucinate a
+      condition: what is not in a column is simply not in the graph.
+  spec: docs/architectures/14-mapped-tables.md
+
+schema: [science_core]
+
+steps:
+  - ingest_table
+  - map_rows:
+      nodes:
+        study:
+          type: Study
+          key: study
+          fields: {name: study_name}
+        result:
+          type: StudyResult
+          key: result
+          span: outcome
+          fields: {statement: outcome, value: value, unit: unit}
+      links:
+        - {predicate: produced_by, src: result, dst: study, span: study}
+  - validate
+  - {assert: {agent: run}}
+  - index_nodes
+
+ask:
+  - index_nodes
+  - retrieve
+  - {graph_expand: {depth: 3, limit: 60, supports: [supports], opposes: [disputes]}}
+  - graph_answer

@@ -1,0 +1,72 @@
+# Architecture 5 -- the process Atlas.
+#
+# What was planned, what was actually done, under which conditions, what came out
+# including what did not work, and what would have to be rechecked if a dataset were
+# withdrawn. The centre of the record is the doing of the work, not a sentence about it.
+#
+#   atlas run architectures/a05.yaml corpus/*.pdf --store store/
+#   atlas ask architectures/a05.yaml "under which conditions does this hold?" --store store/
+
+variant:
+  id: a05
+  number: 5
+  title: Experiments, conditions and reproducibility
+  summary: >-
+    A record centred on the work itself: the procedure as written beside the run as
+    carried out, the conditions a result holds under, negative results as first-class
+    results, and the closure a retraction reaches.
+  mechanism: >-
+    A protocol and a run are separate identities and the pack declares them disjoint, so
+    a file of instructions cannot be classified as a performed experiment. `align` puts
+    the two step lists side by side and names four kinds of departure. `compare` sorts
+    results into comparable, partially comparable and insufficient, and a condition
+    nobody recorded counts as insufficient rather than as agreement. `lineage` closes
+    over the dependency relations from a withdrawn dataset or a faulty script and
+    returns every affected thing with the chain that connects it.
+  family: process-aware traversal
+  optimises: answering "under which conditions", and knowing what a retraction reaches
+  cost: >-
+    Papers frequently do not report the process, so a great deal comes back
+    insufficient -- which is the honest answer and looks like a poor yield.
+  needs: [model]
+  scores: {relevance: 92, novelty: 89, prospect: 95, total: 92}
+  questions:
+    - What has been tried here and did not work?
+    - Under which conditions does this result hold, and which results are comparable?
+    - Where does the run depart from the procedure it says it followed?
+    - Which of our conclusions rest on this dataset?
+  differs:
+    a04: >-
+      The subject is the work rather than the vocabulary: no induction, and the
+      conditions are modelled rather than discovered.
+    a06: >-
+      What is checked is the science -- conditions, plan against run, dependencies --
+      rather than the extraction that produced the record.
+  spec: docs/architectures/05-process-atlas.md
+
+schema: [science_core, process]
+
+steps:
+  - ingest_pdf
+  - {extract_llm: {segment: page}}
+  - relocate
+  - validate
+  - {relate_llm: {segment: page}}
+  - relate
+  - {assert: {agent: run}}
+  - align:
+      plan: ProtocolStep
+      run: ExecutionStep
+      asserted: [realises]
+  - index_nodes
+
+ask:
+  - index_nodes
+  - retrieve
+  - {graph_expand: {depth: 3, limit: 60, supports: [supports], opposes: [disputes]}}
+  - compare:
+      type: StudyResult
+      conditions: [observed_under, under_condition]
+      fields: [conditions]
+      comparable: [comparable_with]
+  - graph_answer
