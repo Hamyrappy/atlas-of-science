@@ -3,6 +3,7 @@
 A substrate for machine-readable markup: a corpus is read once and turned into typed things, each
 bound to a verbatim fragment of its source, under whatever ontology you plug in.
 
+How it is put together, in pictures: [`docs/overview.md`](docs/overview.md) ·
 Project page: [`index.html`](index.html) · Russian overview: [`docs/initiative.ru.md`](docs/initiative.ru.md)
 
 ## Why
@@ -242,6 +243,7 @@ packs/
 pipeline.yaml        the default run over that pack
 tests/               the suite; no network, no API key, no committed binaries
 docs/
+  overview.md        how the whole thing fits together, in six diagrams
   architecture.md    the metamodel, the step model, the store, the open questions
   architectures/     one specification per architecture, and the rule they all obey
   ontology.md        what a pack declares, how identity works, how the version is hashed

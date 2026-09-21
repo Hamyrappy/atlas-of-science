@@ -4,6 +4,9 @@ For the next agent, or the next person, picking this up. `CLAUDE.md` says what m
 and where things go; this file says **where the work stands, what standard the existing code was
 held to, and the traps that have already been paid for.** Read both. Read this one second.
 
+If you have never seen this repository before, read `docs/overview.md` first: six diagrams,
+fifteen minutes, and everything below will mean something.
+
 If you change something this file describes, change this file in the same commit. A handoff that
 has quietly stopped being true is worse than none, because the next agent will trust it.
 
@@ -83,9 +86,12 @@ domain has leaked in.
 
 ### Documents land in the same commit
 
-New step, new option, new configuration key, changed behaviour — the document goes with it. Four
-carry the project (`README.md`, `CLAUDE.md`, `docs/architecture.md`, `docs/ontology.md` with
-`docs/evaluation.md`), plus one specification per architecture.
+New step, new option, new configuration key, changed behaviour — the document goes with it. Five
+carry the project (`README.md`, `CLAUDE.md`, `docs/overview.md`, `docs/architecture.md`,
+`docs/ontology.md` with `docs/evaluation.md`), plus one specification per architecture.
+
+`docs/overview.md` is the one that goes stale without anybody noticing, because it is pictures:
+a step added to a chain or a rule that moved changes a diagram there and nothing else complains.
 
 Copy real output into documents rather than typing what it should say. The step tables in
 `docs/architecture.md` were generated from the live registry; the options column is the string the

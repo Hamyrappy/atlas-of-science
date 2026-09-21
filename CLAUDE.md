@@ -5,9 +5,11 @@ Atlas of Science is a substrate for machine-readable markup: a small metamodel t
 ## Read in this order
 
 1. `README.md` — what the library does and how to run it.
-2. `HANDOFF.md` — where the work stands, the bar the code is held to, and the traps already paid for.
-3. `docs/architecture.md` — the metamodel, the step model, the store, provenance end to end.
-4. `atlas/model/` — the six types everything else exchanges. Read the files themselves; nothing here restates them.
+2. `docs/overview.md` — the same thing in six diagrams: the two chains, the six concepts, the
+   four invariants, what a step is. Fifteen minutes, and the rest of this file will make sense.
+3. `HANDOFF.md` — where the work stands, the bar the code is held to, and the traps already paid for.
+4. `docs/architecture.md` — the metamodel, the step model, the store, provenance end to end.
+5. `atlas/model/` — the six types everything else exchanges. Read the files themselves; nothing here restates them.
 
 Then the module you are about to change, and its tests. Do not start from a grep.
 
@@ -44,7 +46,7 @@ atlas/llm.py           one chat client with a disk cache in front of it
 atlas/cli.py           argument parsing and file IO; no logic lives here
 packs/                 ontology packs; data the wheel ships, reached through `ontology.builtin`
 architectures/         one manifest per architecture, reached through `catalogue.variants`
-docs/                  architecture, ontology, evaluation contract, one spec per architecture
+docs/                  overview in diagrams, architecture, ontology, evaluation contract, one spec per architecture
 tests/                 one file per module; fixtures are generated, never committed as binaries
 ```
 
@@ -78,13 +80,15 @@ Tests never reach the network and never need a key. A test that would call a mod
 
 ## Documentation is part of the change
 
-Five documents carry this project, and each has one job. Keep them true; a claim that has quietly
+Six documents carry this project, and each has one job. Keep them true; a claim that has quietly
 stopped holding is worse than no claim, because it is trusted.
 
 - `README.md` — what the library is, how to install it, how to run it from the command line, how to
   import it. Every command and every code sample in it must run as written.
 - `CLAUDE.md` — this file: the invariants, the layout, the rules for changing the metamodel, the
   direction. It changes when a rule changes, not when code moves.
+- `docs/overview.md` — the whole library in six diagrams, for somebody who has just been handed
+  the repository. It says nothing the other documents do not; it says it in fifteen minutes.
 - `docs/architecture.md` — the metamodel, the step model, the store, provenance end to end, and the
   open questions. The reference a contributor reads before touching anything.
 - `docs/ontology.md` and `docs/evaluation.md` — how a pack is written, and what is measured where.
