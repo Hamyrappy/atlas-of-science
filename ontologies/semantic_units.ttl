@@ -1,0 +1,63 @@
+# What is being claimed, as opposed to who claims it: the form of the content itself.
+#
+# It builds on the science core, whose InformationEntity, Proposition, StudyResult and
+# Context it uses, and imports it.
+#
+# The science core models the argument -- a position, a line of evidence, a result. It says
+# nothing about the shape of what is claimed, and three sentences that need very different
+# treatment collapse into one proposition without this ontology:
+#
+#   "some X have Y"      an existential claim; one case establishes it
+#   "usually X have Y"   a statistical claim; counting is the only way to check it
+#   "all X have Y"       a universal claim; one counterexample refutes it
+#
+# A store that recorded all three as "X relates to Y" has thrown away the thing that decides
+# what a counterexample means, and no amount of retrieval gets it back.
+#
+# So a SemanticUnit records the kind of expression, the quantifier, the polarity, the
+# modality and the scope, the two terms the claim relates, and the original wording. The
+# last is not redundancy: what a formal translation loses is exactly what somebody later
+# needs in order to find out that it lost it. The kinds, quantifiers and modalities are not
+# enumerated here -- they are a run's configuration, checked by `compile_units` against what
+# it was told to accept, because which distinctions matter is a property of the corpus.
+#
+# `logic_profile` is filled by `compile_units`, not by an extractor: a unit that compiles
+# to an OWL axiom is placed in the OWL 2 profiles its axiom is in, and whether it can be
+# reasoned over at all is a judgement about completeness, not something to ask a model.
+
+@prefix units: <https://w3id.org/atlas-of-science/units#> .
+@prefix core:  <https://w3id.org/atlas-of-science/core#> .
+@prefix field: <https://w3id.org/atlas-of-science/fields#> .
+@prefix atlas: <https://w3id.org/atlas-of-science/substrate#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix obo:   <http://purl.obolibrary.org/obo/> .
+@prefix sepio: <https://w3id.org/sepio-framework/sepio-linkml/> .
+
+<https://w3id.org/atlas-of-science/semantic_units>
+    a owl:Ontology ;
+    rdfs:label "Atlas of Science: the form of a claim" ;
+    owl:versionIRI <https://w3id.org/atlas-of-science/semantic_units/0.2> ;
+    owl:imports <https://w3id.org/atlas-of-science/science_core> ;
+    atlas:profile "EL", "QL", "RL", "DL" .
+
+units:SemanticUnit a owl:Class ;
+    atlas:name "SemanticUnit" ; rdfs:subClassOf obo:IAO_0000030 ;
+    skos:definition "The form of what is claimed - its kind, quantifier, polarity and scope, and the two terms it relates." ;
+    atlas:fields ( field:kind field:quantifier field:polarity field:modality field:scope
+                   field:subject_term field:object_term field:expression
+                   field:logic_profile field:definition ) ;
+    atlas:labelField field:expression .
+
+units:expresses a owl:ObjectProperty ;
+    atlas:name "expresses" ; rdfs:domain sepio:Proposition ; rdfs:range units:SemanticUnit ;
+    skos:definition "The claim has this form, which is what decides what would refute it." .
+
+units:counterexampleTo a owl:ObjectProperty ;
+    atlas:name "counterexample_to" ; rdfs:domain sepio:StudyResult ; rdfs:range units:SemanticUnit ;
+    skos:definition "The result is offered against the unit - which only bites on some kinds." .
+
+units:holdsUnder a owl:ObjectProperty ;
+    atlas:name "holds_under" ; rdfs:domain units:SemanticUnit ; rdfs:range core:Context ;
+    skos:definition "The conditions the claim is restricted to, where it is restricted at all." .

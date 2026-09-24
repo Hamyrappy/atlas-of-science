@@ -1,0 +1,102 @@
+# A local, versioned profile of the SciERC annotation schema: six mention types and seven
+# relations for scientific text.
+#
+# SciERC is an annotation scheme, not a published ontology. It has no official OWL IRIs, so
+# this ontology does not invent any: every term carries an IRI of ours and names the scheme
+# it came from with `dct:source`. That is the honest form of reuse. The labels, the
+# distinctions and the relation set are taken from the scheme unchanged; the identities are
+# ours and say so. An ontology that minted an IRI in somebody else's namespace would be
+# claiming an identity nobody published, and every corpus that trusted it would be wrong in
+# the same way.
+#
+# What the scheme does not carry is an argument: there is no position, no evidence and no
+# computation here. That is the point of loading it alone -- it is the control
+# architecture's vocabulary, and the difference it makes is what `science_core` is there
+# to be measured against.
+#
+# THIS IS THE BASE MODULE, and it is plain RDFS on purpose: the class list, the relation
+# signatures, nothing that makes the reasoner do more than type a node by the relation it
+# stands in. The control architecture runs the RDFS engine over exactly this. What the
+# scheme also implies -- that its six labels are mutually exclusive, that compare and
+# conjunction are symmetric -- is in `scierc_rl.ttl` and `scierc_ql.ttl`, for the
+# architectures whose engines can use it.
+
+@prefix scierc: <https://w3id.org/atlas-of-science/scierc#> .
+@prefix field: <https://w3id.org/atlas-of-science/fields#> .
+@prefix atlas: <https://w3id.org/atlas-of-science/substrate#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix dct:   <http://purl.org/dc/terms/> .
+
+<https://w3id.org/atlas-of-science/scierc>
+    a owl:Ontology ;
+    rdfs:label "SciERC, as a local profile" ;
+    owl:versionIRI <https://w3id.org/atlas-of-science/scierc/0.2> ;
+    owl:imports <https://w3id.org/atlas-of-science/fields> ;
+    dct:source <https://nlp.cs.washington.edu/sciIE/> ;
+    atlas:profile "RDFS", "EL", "QL", "RL", "DL" .
+
+scierc:Task a owl:Class ;
+    atlas:name "Task" ; dct:source <https://nlp.cs.washington.edu/sciIE/> ;
+    skos:definition "A problem or objective being worked on, stated apart from any solution." ;
+    atlas:fields ( field:name field:definition ) ; atlas:labelField field:name .
+
+scierc:Method a owl:Class ;
+    atlas:name "Method" ; dct:source <https://nlp.cs.washington.edu/sciIE/> ;
+    skos:definition "A model, algorithm, procedure or technique named in the text." ;
+    atlas:fields ( field:name field:definition ) ; atlas:labelField field:name .
+
+scierc:Metric a owl:Class ;
+    atlas:name "Metric" ; dct:source <https://nlp.cs.washington.edu/sciIE/> ;
+    skos:definition "The name of a measure, kept apart from any value measured with it." ;
+    atlas:fields ( field:name field:unit field:definition ) ; atlas:labelField field:name .
+
+scierc:Material a owl:Class ;
+    atlas:name "Material" ; dct:source <https://nlp.cs.washington.edu/sciIE/> ;
+    skos:definition "Data, a resource or a physical material, according to the context." ;
+    atlas:fields ( field:name field:definition ) ; atlas:labelField field:name .
+
+scierc:OtherScientificTerm a owl:Class ;
+    atlas:name "OtherScientificTerm" ; dct:source <https://nlp.cs.washington.edu/sciIE/> ;
+    skos:definition "A scientific term outside the other labels; a candidate, not a permanent class." ;
+    atlas:fields ( field:name field:definition ) ; atlas:labelField field:name .
+
+scierc:Generic a owl:Class ;
+    atlas:name "Generic" ; dct:source <https://nlp.cs.washington.edu/sciIE/> ;
+    skos:definition "A general or incomplete designation, resolved by coreference rather than typed." ;
+    atlas:fields ( field:name field:definition ) ; atlas:labelField field:name .
+
+scierc:usedFor a owl:ObjectProperty ;
+    atlas:name "used_for" ; rdfs:domain scierc:Method ; rdfs:range scierc:Task ;
+    skos:definition "Applied to this task in this context, which is not a purpose of every instance." .
+
+scierc:featureOf a owl:ObjectProperty ;
+    atlas:name "feature_of" ; rdfs:domain scierc:OtherScientificTerm ; rdfs:range scierc:Method ;
+    skos:definition "A property of the thing, kept apart from any number recorded for it." .
+
+scierc:hyponymOf a owl:ObjectProperty ;
+    atlas:name "hyponym_of" ;
+    rdfs:domain scierc:OtherScientificTerm ; rdfs:range scierc:OtherScientificTerm ;
+    skos:definition "A candidate terminological inclusion, not a subclass axiom." .
+
+# Named apart from the science core's `part_of` on purpose. That one is the SIO part
+# relation between things in the world; this one is what the annotation scheme marks
+# between two mentions in a text, and merging them by their label is exactly the bridge
+# mistake the scheme warns about.
+scierc:partOfMention a owl:ObjectProperty ;
+    atlas:name "part_of_mention" ; rdfs:domain scierc:Method ; rdfs:range scierc:Method ;
+    skos:definition "A part in the stated sense; composition of a model and of a text are not one." .
+
+scierc:compare a owl:ObjectProperty ;
+    atlas:name "compare" ; rdfs:domain scierc:Method ; rdfs:range scierc:Method ;
+    skos:definition "Compared with, which does not say that either one is better." .
+
+scierc:evaluateFor a owl:ObjectProperty ;
+    atlas:name "evaluate_for" ; rdfs:domain scierc:Method ; rdfs:range scierc:Metric ;
+    skos:definition "Evaluated by this measure; the task, data and protocol are separate relations." .
+
+scierc:conjunction a owl:ObjectProperty ;
+    atlas:name "conjunction" ;
+    rdfs:domain scierc:OtherScientificTerm ; rdfs:range scierc:OtherScientificTerm ;
+    skos:definition "Coordinated in the text, which is not a causal or subject-matter relation." .

@@ -1,0 +1,63 @@
+# The science core for the OWL 2 QL engine: what a query can be rewritten with, so that a
+# store answers it without anything being materialised.
+#
+# QL is the profile of ontology-based data access. A question -- "which propositions does
+# something bear on, and which results are those arguments made of" -- is rewritten, using
+# these axioms, into a union of plain queries over what is stored, and each of those is a
+# join a relational store can execute. The answers are the certain answers: everything the
+# ontology and the data together imply, and nothing the engine had to invent a row for.
+#
+# What QL can say that matters for that:
+#
+# * inverse relations (has_part is part_of read the other way), so a question asked in
+#   either direction reaches the same rows;
+# * a symmetric relation (comparable_with), for the same reason;
+# * existentials on the right -- every result came out of some investigation -- which
+#   make "results produced by an investigation" include every stored result, whether or
+#   not its investigation was extracted;
+# * the defined classes' sufficient conditions of the one shape QL allows: being disputed
+#   by anything makes a proposition contested.
+#
+# What it cannot say is why this module exists at all: transitivity and property chains are
+# outside QL, because a query rewritten with them would not be a finite union. An
+# architecture that needs "part of, however many steps" runs the RL engine instead.
+
+@prefix core:  <https://w3id.org/atlas-of-science/core#> .
+@prefix atlas: <https://w3id.org/atlas-of-science/substrate#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix obo:   <http://purl.obolibrary.org/obo/> .
+@prefix evi:   <https://w3id.org/EVI#> .
+@prefix sepio: <https://w3id.org/sepio-framework/sepio-linkml/> .
+
+<https://w3id.org/atlas-of-science/science_core_ql>
+    a owl:Ontology ;
+    rdfs:label "Atlas of Science: the scientific argument, for query rewriting" ;
+    owl:versionIRI <https://w3id.org/atlas-of-science/science_core_ql/0.2> ;
+    owl:imports <https://w3id.org/atlas-of-science/science_core> ;
+    atlas:profile "QL", "DL" .
+
+core:hasPart owl:inverseOf core:partOf .
+core:comparableWith a owl:SymmetricProperty .
+core:directlyDependsOn a owl:AsymmetricProperty .
+core:supports owl:propertyDisjointWith core:disputes .
+
+sepio:StudyResult rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty core:producedBy ; owl:someValuesFrom obo:OBI_0000066 ] .
+sepio:Statement rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty core:states ; owl:someValuesFrom sepio:Proposition ] .
+sepio:EvidenceLine rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty core:restsOn ; owl:someValuesFrom sepio:StudyResult ] .
+evi:Computation rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty core:usedSoftware ; owl:someValuesFrom evi:Software ] .
+
+[ a owl:Restriction ; owl:onProperty [ owl:inverseOf core:supports ] ;
+  owl:someValuesFrom owl:Thing ]
+    rdfs:subClassOf core:SupportedProposition .
+
+[ a owl:Restriction ; owl:onProperty [ owl:inverseOf core:disputes ] ;
+  owl:someValuesFrom owl:Thing ]
+    rdfs:subClassOf core:ContestedProposition .
+
+[ a owl:Restriction ; owl:onProperty core:observedUnder ; owl:someValuesFrom owl:Thing ]
+    rdfs:subClassOf core:ConditionedResult .

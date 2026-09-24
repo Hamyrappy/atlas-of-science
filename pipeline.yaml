@@ -1,9 +1,9 @@
 # The default run: read PDFs, ask a model for typed statements about each page, put
-# every quote back where it came from, drop what the pack refuses, and record the rest
+# every quote back where it came from, drop what the ontology refuses, and record the rest
 # as assertions. Copy the file to change a step: the names below are looked up in the
 # registry, so a stub, a second extractor or a step of your own goes in by being named.
 
-schema: packs/ml_paper.yaml
+schema: ml_paper
 
 steps:
   - ingest_pdf

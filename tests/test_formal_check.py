@@ -91,11 +91,12 @@ def test_a_relation_naming_a_type_that_does_not_exist_is_reported() -> None:
     assert [one.kind for one in report.problems] == ["unknown-range"]
 
 
-def test_a_characteristic_this_library_cannot_execute_is_reported() -> None:
+def test_a_characteristic_owl_does_not_have_is_reported() -> None:
+    """All seven of OWL 2's are accepted now; a word that is none of them is not."""
     report = inspect(schema(
         TypeDef(name="Thing"),
         predicates=(PredicateDef(name="r", domain="Thing", range="Thing",
-                                 characteristics=("reflexive",)),),
+                                 characteristics=("circular",)),),
     ))
 
     assert [one.kind for one in report.problems] == ["unknown-characteristic"]

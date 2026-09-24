@@ -35,7 +35,7 @@ from atlas.model import Frozen
 
 SHIPPED = (Path(__file__).parent / "architectures", Path(__file__).parents[1] / "architectures")
 """Where the manifests are: inside the installed package, and beside it in a checkout --
-the same two places `atlas.ontology` looks for packs, for the same reason."""
+the same two places `atlas.ontology` looks for ontologies, for the same reason."""
 
 KEY = "variant"
 

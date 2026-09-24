@@ -6,8 +6,18 @@ order, passing one dict along. Replacing a step is naming a different one in the
 and configuring a step is a key under its name -- neither is a reason to edit this
 module, and there is nothing here to subclass.
 
-The schema is loaded once, from the packs the configuration names, and every step sees
-it in the state: the pipeline is the seam where an ontology is plugged in.
+The schema is loaded once, from the ontologies the configuration names, and every step
+sees it in the state: the pipeline is the seam where an ontology is plugged in. `schema`
+is a name, a list of names, or a mapping that also says which OWL 2 profile the ontology
+must stay within and which SHACL shapes the records are held to:
+
+    schema:
+      ontologies: [science_core_rl, scierc_rl]
+      profile: RL
+      shapes: [science_core]
+
+An ontology outside the profile it names is refused when the file is read, with the
+axioms that leave it -- the configuration is a contract with the engine it runs.
 
 A run can be watched and entered part-way: `on_step` is called with the name each step
 was configured under, `initial` is public, and `run_state` runs the chain over a state
@@ -89,7 +99,7 @@ class Pipeline:
         steps = tuple(_step(path, entry) for entry in config.get(chain) or ())
         _check_order(path, steps)
         return cls(
-            load(*_listed(config.get("schema")), base=path.parent),
+            _schema(config.get("schema"), path),
             steps,
             store=open_store(config["store"], path.parent) if config.get("store") else None,
             meta={key: value for key, value in config.items() if key not in RESERVED},
@@ -199,6 +209,19 @@ def _check_order(path: Path, steps: tuple[tuple[Step, Frozen], ...]) -> None:
                 raise ValueError(f"{path}: step '{step.name}' reads '{key}', "
                                  f"which '{producer}' produces after it")
         available |= set(step.produces)
+
+
+def _schema(value: Any, path: Path) -> Schema:
+    """The schema a configuration names, in any of the three forms `schema` takes."""
+    if isinstance(value, Mapping):
+        unknown = set(value) - {"ontologies", "packs", "profile", "shapes"}
+        if unknown:
+            raise ValueError(f"{path}: schema takes ontologies, profile and shapes; "
+                             f"not {', '.join(sorted(unknown))}")
+        return load(*_listed(value.get("ontologies") or value.get("packs")),
+                    base=path.parent, profile=str(value.get("profile") or ""),
+                    shapes=_listed(value.get("shapes")))
+    return load(*_listed(value), base=path.parent)
 
 
 def _listed(value: str | Iterable[str] | None) -> tuple[str, ...]:

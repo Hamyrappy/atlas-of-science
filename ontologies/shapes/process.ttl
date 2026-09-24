@@ -1,0 +1,51 @@
+# What a record of plans, runs and outcomes must carry before two results are compared.
+#
+# The process architecture answers "under which conditions does this hold" and "what has
+# been tried and did not work". Both questions have a precondition the ontology cannot
+# enforce: that the conditions were recorded at all. A result with none is not wrong -- it
+# is incomparable -- so it is a warning, and `compare` reads the warnings to keep it out of
+# a comparison instead of concluding it agrees with everything.
+
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix core:  <https://w3id.org/atlas-of-science/core#> .
+@prefix proc:  <https://w3id.org/atlas-of-science/process#> .
+@prefix repro: <https://w3id.org/reproduceme#> .
+@prefix field: <https://w3id.org/atlas-of-science/fields#> .
+@prefix sepio: <https://w3id.org/sepio-framework/sepio-linkml/> .
+
+proc:ResultHasConditions a sh:NodeShape ;
+    sh:targetClass sepio:StudyResult ;
+    sh:or (
+        [ sh:path core:observedUnder ; sh:minCount 1 ]
+        [ sh:path proc:obtainedUnder ; sh:minCount 1 ]
+        [ sh:path field:conditions ; sh:minCount 1 ]
+    ) ;
+    sh:severity sh:Warning ;
+    sh:message "no conditions are recorded for this result, so it cannot be compared with another" .
+
+proc:ExperimentFollowsOneProtocol a sh:NodeShape ;
+    sh:targetClass repro:Experiment ;
+    sh:property [
+        sh:path proc:follows ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "a run follows one written procedure; two are two runs recorded as one" ;
+    ] .
+
+proc:StepRealisesOnePlannedStep a sh:NodeShape ;
+    sh:targetClass proc:ExecutionStep ;
+    sh:property [
+        sh:path proc:realises ;
+        sh:maxCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "one step that happened is matched to several planned steps; `align` will report it as renamed or merged" ;
+    ] .
+
+proc:StepHasOrder a sh:NodeShape ;
+    sh:targetClass proc:ProtocolStep, proc:ExecutionStep ;
+    sh:property [
+        sh:path field:order ;
+        sh:minCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "a step with no order cannot be aligned by position" ;
+    ] .

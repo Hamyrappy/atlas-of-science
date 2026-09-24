@@ -1,15 +1,26 @@
-"""The pluggable ontology: the types and predicates a body of nodes is written under.
+"""The pluggable ontology: the axioms a body of nodes is written under, and the view of them.
 
-The schema is data, not code. Nothing here names a type, a field or a predicate --
-those arrive at run time from whatever file was loaded -- and nothing here reads a
-file, because loading and merging belong to `atlas.ontology` and this module is
-what everyone else may depend on.
+A `Schema` is two things at once, and it is worth keeping them apart.
 
-Every term carries an optional IRI and mappings to public vocabularies, and is
-looked up by its name or by its identity, CURIEs expanded through `prefixes`: a
-label is local to one schema, an IRI survives the schema being replaced. Validation
-returns a list of violations instead of raising, because a run scores the
-markup it got rather than aborting on the first bad node.
+**The ontology** is `axioms`: OWL 2 class, property and characteristic axioms
+(`atlas.model.owl`), which is what every engine under `atlas/reason/` reasons with. They
+arrive from an ontology file -- Turtle, RDF/XML, JSON-LD, or a legacy YAML pack compiled
+into the same axioms -- and nothing here names one of their terms.
+
+**The vocabulary** is `types` and `predicates`: what a prompt offers a model, what a
+configuration names, what a validator checks a node against. It is a projection of the
+axioms -- each named class with its told parent, fields and identity, each object
+property with its domain, range and characteristics -- and `hierarchy` is the class
+hierarchy a reasoner computed from the axioms, which is what `is_a` answers from. A
+schema built by hand from `types` and `predicates` alone, as tests and small tools do,
+still works: `every_axiom` derives the axioms that projection states, so the engines see
+the same thing either way.
+
+Every term carries an optional IRI and mappings to public vocabularies, and is looked up
+by its name or by its identity, CURIEs expanded through `prefixes`: a label is local to one
+schema, an IRI survives the schema being replaced. Validation returns a list of violations
+instead of raising, because a run scores the markup it got rather than aborting on the
+first bad node.
 """
 
 from __future__ import annotations
@@ -18,6 +29,19 @@ from pydantic import Field
 
 from atlas.model.base import Frozen
 from atlas.model.graph import Link, Node
+from atlas.model.owl import (
+    TOP,
+    Axiom,
+    DisjointClasses,
+    Domain,
+    HasCharacteristic,
+    InverseProperties,
+    Named,
+    Property,
+    Range,
+    SubClassOf,
+    SubPropertyOf,
+)
 
 
 class FieldDef(Frozen):
@@ -35,6 +59,11 @@ class TypeDef(Frozen):
     hint: a pack that declares a type disjoint from one of its own ancestors has
     declared a type nothing can satisfy, and a step that checks the ontology before a
     release says so rather than waiting for the first node to be refused.
+
+    `defined` marks a class whose members an engine works out -- "a line of evidence
+    that supports some proposition" -- and that an extractor is therefore never offered.
+    Asking a model to label something the ontology decides would be asking it to guess
+    what the axioms already say.
     """
 
     name: str
@@ -45,50 +74,135 @@ class TypeDef(Frozen):
     mappings: tuple[str, ...] = ()
     disjoint_with: tuple[str, ...] = ()
     description: str = ""
+    defined: bool = Field(
+        default=False,
+        description="Membership is inferred from the ontology's axioms, never asked of a model",
+    )
 
 
 TRANSITIVE = "transitive"
 SYMMETRIC = "symmetric"
-CHARACTERISTICS = (TRANSITIVE, SYMMETRIC)
-"""What a pack may say about how a relation behaves, and the whole list of it.
-
-Deliberately two: these are the only two a materialisation can close over without
-either a reasoner or a decision about what to do when the closure stops terminating.
-A pack that needs more is asking for a profile this library does not implement, and
-saying so here is better than accepting the word and ignoring it.
-"""
+CHARACTERISTICS = (
+    TRANSITIVE, SYMMETRIC, "asymmetric", "reflexive", "irreflexive", "functional",
+    "inverse-functional",
+)
+"""What an ontology may say about how a relation behaves: the seven characteristics of
+OWL 2, and nothing else. Which of them an engine executes is the engine's to say --
+the OWL 2 RL engine executes all but `reflexive`, which would type every individual
+and is outside that profile -- and a word outside this list is refused when the
+ontology is checked rather than accepted and ignored."""
 
 
 class PredicateDef(Frozen):
     """One relation type, with the node types it may connect and how it behaves.
 
-    `characteristics` and `inverse_of` are the executable part of an RBox: what a
-    materialisation may derive from an asserted link without asking anybody. Both are
-    declared by the pack, so the core never learns that some particular relation is
-    transitive -- only that a relation may say it is.
+    `characteristics`, `inverse_of` and `parents` are the RBox as a configuration reads it:
+    what a materialisation may derive from an asserted link without asking anybody. All of
+    them are declared by the ontology, so the core never learns that some particular
+    relation is transitive -- only that a relation may say it is. A domain or range left
+    as `owl:Thing` says nothing, which is what an ontology that declares none means.
     """
 
     name: str
-    domain: str
-    range: str
+    domain: str = TOP
+    range: str = TOP
     iri: str | None = None
     mappings: tuple[str, ...] = ()
     characteristics: tuple[str, ...] = ()
     inverse_of: str | None = None
+    parents: tuple[str, ...] = Field(
+        default=(), description="Properties this one is declared a sub-property of"
+    )
     description: str = ""
 
 
 class Schema(Frozen):
-    """A version of one ontology: its terms, and the prefixes their CURIEs use.
+    """A version of one ontology: its axioms, the vocabulary they project, and its prefixes.
 
     `version` is a content hash of whatever was loaded; it travels on every node and
-    link, so an object written last month stays interpretable after today's edit.
+    link, so an object written last month stays interpretable after today's edit --
+    including what the ontology implied about it, which is why the axioms travel too.
+
+    `profile` is the OWL 2 profile the configuration requires the ontology to stay
+    within (`RDFS`, `EL`, `QL`, `RL` or `DL`), empty for none; the loader refuses an
+    ontology that leaves it. `shapes` is the Turtle of the SHACL shapes the configuration
+    named, the closed-world half of the ontology: what a node must carry, as opposed to
+    what may be inferred about it.
     """
 
     version: str
+    iri: str = ""
     prefixes: dict[str, str] = Field(default_factory=dict)
     types: tuple[TypeDef, ...] = ()
     predicates: tuple[PredicateDef, ...] = ()
+    axioms: tuple[Axiom, ...] = ()
+    hierarchy: dict[str, tuple[str, ...]] = Field(
+        default_factory=dict,
+        description="Every named superclass of each named class, as a reasoner computed it",
+    )
+    unsatisfiable: tuple[str, ...] = Field(
+        default=(), description="Named classes the reasoner found can have no instance"
+    )
+    profile: str = ""
+    shapes: str = ""
+    imports: tuple[str, ...] = Field(
+        default=(), description="Ontologies imported by IRI and not available to load"
+    )
+    unread: tuple[str, ...] = Field(
+        default=(),
+        description="What the ontology states that no engine here models, by its triple",
+    )
+
+    def every_axiom(self) -> tuple[Axiom, ...]:
+        """The axioms, together with every one the vocabulary states and they do not.
+
+        An ontology loaded from a file has both, and they agree. A schema written by hand
+        as types and predicates has only the second, and this is what lets every engine
+        reason over it anyway: a told parent is a subclass axiom, a declared domain is a
+        domain axiom, a characteristic is a characteristic.
+        """
+        seen = set(self.axioms)
+        extra: list[Axiom] = []
+        for axiom in self._stated():
+            if axiom not in seen:
+                seen.add(axiom)
+                extra.append(axiom)
+        return (*self.axioms, *extra)
+
+    def _stated(self) -> list[Axiom]:
+        stated: list[Axiom] = []
+        for type_def in self.types:
+            if type_def.parent:
+                stated.append(SubClassOf(sub=Named(name=type_def.name),
+                                         sup=Named(name=self._name_of(type_def.parent))))
+            for other in type_def.disjoint_with:
+                pair = sorted((type_def.name, self._name_of(other)))
+                stated.append(DisjointClasses(classes=tuple(Named(name=n) for n in pair)))
+        for predicate in self.predicates:
+            if predicate.domain and self._name_of(predicate.domain) != TOP:
+                stated.append(Domain(property=predicate.name,
+                                     domain=Named(name=self._name_of(predicate.domain))))
+            if predicate.range and self._name_of(predicate.range) != TOP:
+                stated.append(Range(property=predicate.name,
+                                    range=Named(name=self._name_of(predicate.range))))
+            stated += [HasCharacteristic(property=predicate.name, characteristic=named)
+                       for named in predicate.characteristics if named in CHARACTERISTICS]
+            if predicate.inverse_of:
+                stated.append(InverseProperties(
+                    first=predicate.name, second=self._property_name(predicate.inverse_of)
+                ))
+            stated += [SubPropertyOf(sub=(Property(name=predicate.name),),
+                                     sup=Property(name=self._property_name(parent)))
+                       for parent in predicate.parents]
+        return stated
+
+    def _name_of(self, term: str) -> str:
+        found = self.find_type(term)
+        return found.name if found is not None else term
+
+    def _property_name(self, term: str) -> str:
+        found = self.find_predicate(term)
+        return found.name if found is not None else term
 
     def type_names(self) -> frozenset[str]:
         return frozenset(t.name for t in self.types)
@@ -102,7 +216,14 @@ class Schema(Frozen):
         return next((p for p in self.predicates if self._names(term, p.name, p.iri)), None)
 
     def ancestry(self, term: str) -> tuple[TypeDef, ...]:
-        """A type followed by its parents, nearest first; empty if the term is unknown."""
+        """A type followed by its superclasses: the told parents nearest first, then the
+        ones only a reasoner found. Empty if the term is unknown.
+
+        Told parents first because they are the order a person wrote -- and the order in
+        which fields are inherited and a label is looked for. The inferred ones follow,
+        because a class the ontology *implies* is a superclass is one whose fields and
+        disjointness apply just as much.
+        """
         chain: list[TypeDef] = []
         seen: set[str] = set()
         # A hand-written schema may declare a parent cycle, which loading need not catch.
@@ -111,6 +232,12 @@ class Schema(Frozen):
             seen.add(current.name)
             chain.append(current)
             current = self.find_type(current.parent) if current.parent else None
+        if chain:
+            for name in self.hierarchy.get(chain[0].name, ()):
+                found = self.find_type(name)
+                if found is not None and found.name not in seen:
+                    seen.add(found.name)
+                    chain.append(found)
         return tuple(chain)
 
     def declared_fields(self, term: str) -> tuple[FieldDef, ...]:
@@ -178,8 +305,38 @@ class Schema(Frozen):
         return violations
 
     def is_a(self, term: str, expected: str) -> bool:
-        """Whether a type is the expected type or descends from it."""
+        """Whether a type is the expected type or is subsumed by it.
+
+        Answered from the reasoner's hierarchy where the loader computed one, so a class
+        the axioms make a subclass -- through an equivalence, an intersection, an
+        existential restriction -- is one without anybody having written it as a parent.
+        Everything is a `owl:Thing`, and an unsatisfiable class is subsumed by everything,
+        which is exactly why the loader reports one rather than letting it be used.
+        """
+        if expected == TOP:
+            return self.find_type(term) is not None or term == TOP
+        if term in self.unsatisfiable:
+            return True
         return any(self._names(expected, t.name, t.iri) for t in self.ancestry(term))
+
+    def subproperties(self, term: str) -> tuple[str, ...]:
+        """A property and every property the axioms make a sub-property of it, the property
+        first. Chains are left out: a chain is not a property one can follow by name."""
+        wanted = self._property_name(term)
+        below: dict[str, set[str]] = {}
+        for axiom in self.every_axiom():
+            if isinstance(axiom, SubPropertyOf) and not axiom.chain:
+                sub, sup = axiom.sub[0], axiom.sup
+                if not sub.inverse and not sup.inverse:
+                    below.setdefault(sup.name, set()).add(sub.name)
+        found, frontier = [wanted], [wanted]
+        while frontier:
+            current = frontier.pop()
+            for sub in sorted(below.get(current, ())):
+                if sub not in found:
+                    found.append(sub)
+                    frontier.append(sub)
+        return tuple(found)
 
     def disjoint(self, term: str, other: str) -> bool:
         """Whether the pack forbids anything from being both of these types.
