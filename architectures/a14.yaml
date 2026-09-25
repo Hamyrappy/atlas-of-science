@@ -5,8 +5,9 @@
 # into the same typed graph everything else produces, bound to verbatim spans of the
 # rendered row.
 #
-#   atlas run architectures/a14.yaml data/results.csv --store store/
-#   atlas ask architectures/a14.yaml "which results came out of the same study?" --store store/
+# The store is the SQLite one named below, which the ask chain queries through the ontology:
+#   atlas run architectures/a14.yaml data/results.csv
+#   atlas ask architectures/a14.yaml "which results came out of the same study?"
 
 variant:
   id: a14

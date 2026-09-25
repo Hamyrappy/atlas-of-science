@@ -22,7 +22,7 @@
 # * same_as says two records are of one individual -- one study that two registries
 #   published under two ids. A configuration that names it under `entail: {identity:
 #   [same_as]}` gives it the meaning of owl:sameAs, so every fact about one becomes a fact
-#   about the other, each with the derivation that says why (`eq-rep-s`, `eq-rep-o`).
+#   about the other, each with the derivation that says why (`eq-rep`).
 
 @prefix core:  <https://w3id.org/atlas-of-science/core#> .
 @prefix atlas: <https://w3id.org/atlas-of-science/substrate#> .

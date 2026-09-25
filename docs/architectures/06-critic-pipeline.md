@@ -43,19 +43,45 @@ what you get when two models agree it is one.
 
 | | |
 |---|---|
-| **Schema** | `science_core` + `scierc`. Unchanged by this architecture: what differs is how much checking a record survives before it is written. |
-| **Reasoner** | None. Every critic here is deterministic and local — one node against its own span and its own type. The one model call in the loop is the repair, not the judgement. |
+| **Schema** | `science_core_rl` + `scierc_rl` (each imports its base module), under `profile: RL`, with the shapes `science_core` and `critic`. Unchanged in vocabulary by this architecture: what differs is how much checking a record survives before it is written. |
+| **Reasoner** | Two halves. SHACL (`shacl_validate`) is the closed-world critic of the record before it is asserted; OWL 2 RL (`entail`) over the stored graph at question time reports every clash — two claims the ontology proves cannot both hold — with both premises. The critics of `critique` are deterministic and local; the one model call in the loop is the repair, not the judgement. |
 | **Data** | The store as everywhere else, plus quarantine and findings in the run state. A quarantined node is not asserted, so it never reaches the graph. |
 | **Components and reuse** | `atlas.text.fold` for grounding checks; the shared `Bundle`; `keep_cited` inherited by `graph_answer`. |
 | **Evolution** | Findings that recur are the evidence for a change. Ten documents that all confuse a description with a performance are one extraction problem or one missing distinction, and the findings say which. |
 
-## 4. Pipeline
+## 4. The ontology and the engine
 
-### 4.1 Build
+A critic is a check that can say *this record is wrong* without asking a model whether it
+is. Two of those are not written in Python here; they are the ontology's.
+
+**SHACL, in closed world, before anything is asserted.** `shacl_validate` runs after the
+relations are located and before `assert`, against the shapes the ontology implies — each
+class closed over its own fields, every node on a span, each relation's domain and range
+as a class the record must already have — and the shapes the manifest names:
+`science_core` (a statement on one proposition only, a proposition that records what it
+claims, a computation that depends on itself through a chain) and `critic` (a mention
+that records its name, a quote long enough to locate anything, a method compared with
+itself). A violation refuses the object with the shape's own message; a warning keeps it.
+This is the part of criticism that OWL cannot do: under the open-world assumption a
+proposition with no expression is one whose expression nobody mentioned, and no reasoner
+will complain.
+
+**OWL 2 RL, over the stored graph, at question time.** `supports` and `disputes` are
+disjoint relations and the six SciERC labels disjoint classes, so a line recorded as both
+for and against one proposition, or one mention typed as a method and a task, is a
+**clash** (`prp-pdw`, `cax-dw`) with both premises named. A clash is the ontology proving
+two extracted claims cannot both be true — which is exactly what `reconcile` then has to
+distinguish from a genuine disagreement. The closure's derived links go into the package
+marked as inference, and `reconcile` reads conditions through what the engine derived and
+through every relation the ontology puts under the ones configured.
+
+## 5. Pipeline
+
+### 5.1 Build
 
 ```
 ingest_pdf → extract_llm → relocate → critique → repair_llm → relocate → validate
-           → relate_llm → relate → assert → index_nodes
+           → relate_llm → relate → shacl_validate → assert → index_nodes
 ```
 
 `relocate` runs twice, and the second one is not a mistake. `repair_llm` returns **one
@@ -70,7 +96,7 @@ seam where half a run's nodes get dropped by whoever forgets. This is tested
 
 | Check | What it means | Repairable |
 |---|---|---|
-| `untyped` | The type is not one the pack declares | no |
+| `untyped` | The class is not one the ontology declares | no |
 | `unnamed` | Nothing fills the field that names it, so it reads as its type | yes |
 | `thin` | The whole evidence is shorter than the configured minimum | yes |
 | `ungrounded` | A field's value does not appear in the quote it was taken from | yes |
@@ -90,10 +116,10 @@ statement for `relocate`, never a patched node — a node is a content hash over
 its fields and its span, so a "repaired" node is a different node and pretending
 otherwise would put two claims under one id.
 
-### 4.2 Ask
+### 5.2 Ask
 
 ```
-index_nodes → retrieve → graph_expand → reconcile → graph_answer → check_answer
+index_nodes → retrieve → entail → graph_expand_entailed → reconcile → graph_answer → check_answer
 ```
 
 **`reconcile`** pairs the opposed positions of the package and decides between four
@@ -126,7 +152,7 @@ Nothing is appended and nothing is rewritten. The review is a verdict and a list
 on it is the configuration's decision, and a step that quietly added the missing side
 would be writing prose nobody checked.
 
-## 5. What is stored
+## 6. What is stored
 
 The same as architecture 0's vocabulary plus the argument layer — this architecture
 changes the *process*, not the record. Two things stay out of the store on purpose:
@@ -134,12 +160,13 @@ findings and quarantined nodes. A quarantined node was never asserted, so the gr
 never held it; a run reports it, and a person deciding to accept it does so by asserting
 it, which is how everything else enters this library too.
 
-## 6. Graph retrieval, exactly
+## 7. Graph retrieval, exactly
 
 ```
 question
   → rank nodes by term overlap → roots
-  → graph_expand: depth 3, budget 60, supports/opposes named
+  → entail: the RL closure, with every clash and its premises
+  → graph_expand_entailed: depth 3, budget 60, supports/opposes named, derived links marked
   → reconcile: for each (supporting, opposing) pair on one claim
         same words?            → extraction
         conditions differ?     → conditions      (before the source check)
@@ -149,7 +176,7 @@ question
   → check_answer: citations resolve? both sides cited? package partial?
 ```
 
-## 7. Evolution, from a pattern of findings
+## 8. Evolution, from a pattern of findings
 
 Ten documents produce nodes where a description of a method is typed as the performance
 of it. Three things could be true, and the findings distinguish them:
@@ -163,7 +190,7 @@ Often the third is already covered by the imported vocabulary — `science_core`
 extraction rule, not two new local types. Any change is then run against the earlier
 wrong *and* right cases: records that were correct must stay correct.
 
-## 8. Competency questions
+## 9. Competency questions
 
 | Question | What it uses |
 |---|---|
@@ -172,7 +199,7 @@ wrong *and* right cases: records that were correct must stay correct.
 | Which side did the answer leave out? | `Review.omitted` |
 | What did this run refuse to assert? | `quarantined`, with the findings on each |
 
-## 9. Risks and acceptance
+## 10. Risks and acceptance
 
 - **Correlated errors.** A critic from the same model family misses exactly the mistakes
   that model reliably makes. The deterministic critics are immune to this and the
@@ -188,21 +215,22 @@ Acceptance: run the same corpus through architecture 0 and this one, and compare
 records they disagree about by hand. If the repairs are not better than the originals
 more often than they are worse, the loop costs money and buys nothing.
 
-## 10. Running it
+## 11. Running it
 
 ```bash
 atlas run architectures/a06.yaml corpus/*.pdf --store store/
 atlas ask architectures/a06.yaml "do these two papers disagree?" --store store/
 ```
 
-## 11. Implementation
+## 12. Implementation
 
 | Part | Where |
 |---|---|
-| Vocabulary | `packs/science_core.yaml`, `packs/scierc.yaml` |
+| Vocabulary | `ontologies/science_core_rl.ttl`, `ontologies/scierc_rl.ttl`; shapes `ontologies/shapes/science_core.ttl`, `ontologies/shapes/critic.ttl` |
+| Engines | `atlas/reason/shacl.py`, `atlas/steps/shacl_validate.py`; `atlas/reason/rl.py`, `atlas/steps/entail.py` |
 | Critics | `atlas/steps/critique.py` (`critique`, `Finding`, `repairable`) |
 | Bounded repair and quarantine | `atlas/steps/repair.py` |
 | Conflict review | `atlas/steps/reconcile.py` |
 | Answer review | `atlas/steps/check_answer.py` |
 | Manifest | `architectures/a06.yaml` |
-| Tests | `tests/test_critique.py`, `tests/test_reconcile.py`, `tests/test_check_answer.py` |
+| Tests | `tests/test_critique.py`, `tests/test_shacl_validate.py`, `tests/test_rl.py`, `tests/test_reconcile.py`, `tests/test_check_answer.py` |

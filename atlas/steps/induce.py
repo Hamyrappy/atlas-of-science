@@ -1,4 +1,4 @@
-"""Pooling what the pack has no word for, and the gate a pooled word has to pass.
+"""Pooling what the ontology has no word for, and the gate a pooled word has to pass.
 
 An extractor working against a fixed profile throws away whatever fits none of it. On
 a corpus the profile was not written for, that is most of what is interesting, and the

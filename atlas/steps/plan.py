@@ -11,7 +11,7 @@ the composition explicit, executes it step by step, and keeps the witnesses of e
 Three things make that worth doing, and each is a rule the interpreter enforces.
 
 **A plan is type-checked before it runs.** Every operator's arguments are checked against
-the loaded pack: a predicate the pack does not declare, a type it does not know, an
+the loaded ontology: a predicate the ontology does not declare, a type it does not know, an
 operator nobody implements. That is what stops a planner -- a person or a model -- from
 replacing an unknown relation with a similar-looking word and getting a plausible answer
 built on a relation nobody asserted. The check happens once, before anything executes,
@@ -134,7 +134,7 @@ class PlanOptions(Frozen):
 @register("execute_plan", requires=("store", "schema"),
           produces=("bundle", "trace", "answer_count"), options=PlanOptions)
 def execute_plan(state: State, options: PlanOptions) -> State:
-    """Check the plan against the pack, run it, and package what the last step selected."""
+    """Check the plan against the ontology, run it, and package what the last step selected."""
     store = state["store"]
     schema: Schema = state["schema"]
     problems = check(options.plan, schema)
@@ -163,9 +163,9 @@ def execute_plan(state: State, options: PlanOptions) -> State:
 def check(plan: Sequence[Operator], schema: Schema) -> list[str]:
     """Everything wrong with a plan, before any of it runs.
 
-    A predicate the pack does not declare and a type it does not know are both refused
+    A predicate the ontology does not declare and a type it does not know are both refused
     here, which is the whole defence against a planner replacing an unknown relation
-    with a plausible-looking word: the plan names relations of the pack or it does not
+    with a plausible-looking word: the plan names relations of the ontology or it does not
     run at all.
     """
     problems: list[str] = []

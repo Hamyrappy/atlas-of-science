@@ -58,7 +58,7 @@ class Discrepancy(Frozen):
 class AlignOptions(Frozen):
     """Which types are the two lists, which relations reach them, and how close a match is.
 
-    Everything is the pack's vocabulary and arrives as configuration. `asserted` names
+    Everything is the ontology's vocabulary and arrives as configuration. `asserted` names
     the relation by which a correspondence somebody has already established is
     believed, which is what makes a wrong shallow match fixable in the data rather than
     in the code.
@@ -151,7 +151,7 @@ def _believed(adjacency: Adjacency) -> dict[str, str]:
 def _steps(
     nodes: Iterable[Node], type_name: str, schema: Schema | None, order_field: str
 ) -> list[Step]:
-    """Every node of one of the two types, in the order the pack's order field gives."""
+    """Every node of one of the two types, in the order the ontology's order field gives."""
     held = [
         node for node in nodes
         if (schema.is_a(node.type, type_name) if schema else node.type == type_name)

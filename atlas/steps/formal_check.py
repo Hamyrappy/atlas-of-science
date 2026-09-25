@@ -1,20 +1,20 @@
 """Checking the ontology before a run is written under it, and never checking the data.
 
-A pack is a set of axioms and it can be wrong in ways that no amount of good extraction
+An ontology is a set of axioms and it can be wrong in ways that no amount of good extraction
 will survive: a type disjoint from its own ancestor, a relation whose inverse points
 somewhere else, a transitive relation between two types nothing can be both of. Every
-node written under such a pack is written under a contradiction, and finding out later
+node written under such an ontology is written under a contradiction, and finding out later
 means re-extracting a corpus.
 
 So the ontology is checked at release, which is the one place this library runs anything
-resembling a reasoner, and a run whose pack does not pass does not start. The rule from
+resembling a reasoner, and a run whose ontology does not pass does not start. The rule from
 CLAUDE.md is kept exactly: **the check runs over the schema and never over extracted
 data.** Open-world inference over markup would invent the missing spans the markup layer
 exists to refuse, so nothing here reads a node.
 
 Two decisions are worth their own paragraph.
 
-**An unsatisfiable type fails the release even though nothing instantiates it.** A pack
+**An unsatisfiable type fails the release even though nothing instantiates it.** An ontology
 whose `Reagent` is a subclass of `MaterialEntity` and also disjoint from it is consistent
 in the trivial sense -- no instance, no contradiction -- and it is broken, because the
 first extractor that produces a `Reagent` produces a node that cannot exist. Consistency
@@ -23,7 +23,7 @@ of the whole is not the property worth checking; satisfiability of each class is
 **A check that was not run is reported as not run.** Where a budget stops the checking,
 `unchecked` names what was skipped and `passed` is false. "Nothing was found" and
 "nothing was looked for" are different answers, and a gate that conflated them would
-pass every pack too large to check.
+pass every ontology too large to check.
 
 The gate has two layers. The syntactic one below -- parents, cycles, disjointness in a
 class's own ancestry, domains, ranges, characteristics, inverses -- runs on every
@@ -55,7 +55,7 @@ Kind = Literal[
     "unknown-disjoint", "inverse-mismatch", "unknown-inverse", "unknown-characteristic",
     "self-disjoint", "inconsistent", "outside-profile",
 ]
-"""Everything a pack can be wrong about that is visible without looking at any data."""
+"""Everything an ontology can be wrong about that is visible without looking at any data."""
 
 CHECKS = ("hierarchy", "disjointness", "relations", "inverses", "engine", "profile")
 """The groups of checks, named so that a budget can say which of them it skipped: four
@@ -65,7 +65,7 @@ Engine = Literal["el", "dl"]
 
 
 class Problem(Frozen):
-    """One thing wrong with a pack, named by kind, term and what exactly is wrong."""
+    """One thing wrong with an ontology, named by kind, term and what exactly is wrong."""
 
     kind: Kind
     term: str
@@ -93,11 +93,11 @@ class Report(Frozen):
 
 
 class FormalCheckOptions(Frozen):
-    """How much may be checked, and whether a failing pack stops the run.
+    """How much may be checked, and whether a failing ontology stops the run.
 
-    `budget` is in types: a pack larger than it leaves the checks that walk the whole
+    `budget` is in types: an ontology larger than it leaves the checks that walk the whole
     hierarchy unrun, and the report says so rather than passing. `strict` is what makes
-    this a gate rather than an audit -- with it on, a pack that does not pass raises
+    this a gate rather than an audit -- with it on, an ontology that does not pass raises
     before anything is written under it.
     """
 
@@ -113,11 +113,11 @@ class FormalCheckOptions(Frozen):
 @register("formal_check", requires=("schema",), produces=("formal", "problems"),
           options=FormalCheckOptions)
 def formal_check(state: State, options: FormalCheckOptions) -> State:
-    """Check the loaded pack, and refuse the run if it does not pass and `strict` is set."""
+    """Check the loaded ontology, and refuse the run if it does not pass and `strict` is set."""
     report = inspect(state["schema"], budget=options.budget, engine=options.engine)
     if options.strict and not report.passed:
         raise ValueError(
-            "the pack does not pass the formal gate: "
+            "the ontology does not pass the formal gate: "
             + "; ".join(f"{one.kind} on {one.term!r}: {one.detail}" for one in report.problems[:5])
             + (f"; and {len(report.problems) - 5} more" if len(report.problems) > 5 else "")
             + (f"; unchecked: {', '.join(report.unchecked)}" if report.unchecked else "")
@@ -184,7 +184,7 @@ def _hierarchy(schema: Schema) -> list[Problem]:
     for type_def in schema.types:
         if type_def.parent and schema.find_type(type_def.parent) is None:
             found.append(Problem(kind="unknown-parent", term=type_def.name,
-                                 detail=f"parent {type_def.parent!r} is not a type of this pack"))
+                                 detail=f"parent {type_def.parent!r} is not a class here"))
             continue
         seen: set[str] = set()
         current = type_def
@@ -200,7 +200,7 @@ def _hierarchy(schema: Schema) -> list[Problem]:
 def _disjointness(schema: Schema) -> list[Problem]:
     """Types nothing can be, which is the check this module exists for.
 
-    A class is unsatisfiable when its own ancestry contains two types the pack declares
+    A class is unsatisfiable when its own ancestry contains two types the ontology declares
     disjoint -- including the case where the type is declared disjoint from something it
     descends from. No instance is needed for that to be a defect: the first one produced
     would be a node that cannot exist.
@@ -224,7 +224,7 @@ def _disjointness(schema: Schema) -> list[Problem]:
         })
         found += [
             Problem(kind="unsatisfiable", term=type_def.name,
-                    detail=f"it is both {here!r} and {there!r}, which the pack declares disjoint")
+                    detail=f"it is both {here!r} and {there!r}, declared disjoint")
             for here, there in clashes
         ]
     return found
@@ -271,7 +271,7 @@ def _inverses(schema: Schema) -> list[Problem]:
         if other is None:
             found.append(Problem(kind="unknown-inverse", term=predicate.name,
                                  detail=f"inverse of {predicate.inverse_of!r}, which is not "
-                                        "a relation of this pack"))
+                                        "a relation of this ontology"))
             continue
         if not (schema.is_a(other.range, predicate.domain)
                 and schema.is_a(other.domain, predicate.range)):

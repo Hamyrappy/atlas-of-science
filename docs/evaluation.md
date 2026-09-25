@@ -17,7 +17,7 @@ that says whether one node suffices (`fact`) or the answer requires several
 (`aggregate`, `comparison`). Questions are banked in a versioned file, and the version
 is reported with every number.
 
-The bank is split. `dev` questions may be looked at freely and may steer the pack, the
+The bank is split. `dev` questions may be looked at freely and may steer the ontology, the
 prompt and the retrieval. `test` questions are held out: they are read only by the
 scoring code, and the only thing they ever produce is a reported number. A test question
 that has been inspected while debugging is a dev question from that moment on. It does

@@ -29,7 +29,7 @@ and every other key is the caller's, kept in `Pipeline.meta` and read by nothing
 A file may hold more than one chain. `steps` is the one a run takes by default and
 `ask` is the one that answers a question over what that run wrote, because those are
 two different chains over one vocabulary and one store, and splitting them into two
-files would put the pack, the store and the options in two places to be kept in step.
+files would put the ontology, the store and the options in two places to be kept in step.
 `chain` names which of them to read; everything else about reading a configuration --
 the imports, the ordering check, the options -- is the same whichever was named.
 
@@ -77,9 +77,9 @@ class Pipeline:
 
     @classmethod
     def from_config(cls, path: Path | str, chain: str = CHAIN) -> Pipeline:
-        """Read a configuration: packs, store, imports, and the steps of one chain, in order.
+        """Read a configuration: ontologies, store, imports, and the steps of one chain, in order.
 
-        Packs and the store are resolved against the directory of the configuration, so
+        Ontologies and the store are resolved against the directory of the configuration, so
         it travels with what it names; `imports` is read before the step names are, which
         is how a file names a step from a package of its own. The options under every
         step name are validated here, against what that step declared, so a file that

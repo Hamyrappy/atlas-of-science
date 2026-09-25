@@ -73,13 +73,13 @@ class Comparison(Frozen):
 class CompareOptions(Frozen):
     """Which types are results, which relation leads to their conditions, and what converts.
 
-    Everything here is the pack's vocabulary and arrives as configuration. `conditions`
+    Everything here is the ontology's vocabulary and arrives as configuration. `conditions`
     is the relation from a result to the thing describing what it was obtained under;
     `fields` are the condition fields that have to agree; `units` is the declared
     conversion table, written as `from:to` to a factor.
     """
 
-    type: str = Field(min_length=1, description="The pack type whose instances are compared")
+    type: str = Field(min_length=1, description="The ontology type whose instances are compared")
     conditions: tuple[str, ...] = Field(default=(), description="Relations leading to conditions")
     fields: tuple[str, ...] = Field(default=("conditions",))
     value_field: str = "value"

@@ -227,6 +227,29 @@ not name and none is ever swallowed. The default lives in the model and nowhere 
 and the function cannot disagree about it. `docs/architecture.md` lists what each shipped step
 takes.
 
+The engines are libraries too, for a caller that wants to ask the ontology something without a
+pipeline around it:
+
+```python
+from atlas.ontology import load
+from atlas.reason.ql import parse, rewrite, tbox
+from atlas.steps.classify import by_el
+
+schema = load("science_core_el", "semantic_units", profile="EL")
+schema.is_a("SupportingLine", "EvidenceLine")        # True: a definition puts it there
+by_el(schema).unsatisfiable                          # (): every class can have a member
+
+schema = load("science_core_ql", profile="QL")
+for query in rewrite(parse("q(?line, ?claim) :- bears_on(?line, ?claim)"),
+                     tbox(schema.every_axiom())):
+    print(query.text())                              # bears_on, supports, disputes
+```
+
+`atlas.reason.rl.reason` closes a set of facts under the OWL 2 RL rules and returns each derived
+fact with its derivation; `atlas.reason.tableau.decide` asks the DL tableau whether an ontology has
+a model and which classes can have none; `atlas.reason.shacl.validate` checks nodes and links
+against the shapes in closed world. `docs/ontology.md` says which runs over what, and why.
+
 ## Layout
 
 ```
@@ -300,9 +323,8 @@ index.html           the project page
 
 An architecture here is a configuration, not a mode or a class: a manifest under
 `architectures/` naming the ontologies it loads and the OWL 2 profile they stay within, the
-chain that builds the graph, the chain that
-answers over it, and the options each step runs under. Nothing in `atlas/` branches on which one
-is in use.
+chain that builds the graph, the chain that answers over it, the engines those chains run, and
+the options each step runs under. Nothing in `atlas/` branches on which one is in use.
 
 ```bash
 atlas variants                    # what is on offer
@@ -314,7 +336,10 @@ atlas ask architectures/a05.yaml "under which conditions does this hold?" --stor
 Fifteen ship. They differ in three places — what is stored about a claim (5, 8, 12, 13, 14), how
 the vocabulary and the graph come to exist (4, 6, 10, 15), and how the evidence package is
 selected (0, 7, 16, 18, 19, 20) — and they share everything else, which is what makes them
-comparable. Each has a specification in `docs/architectures/` with the same eleven sections.
+comparable. Each reasons with its ontology by the engine for its profile — RDFS for 0; OWL 2 RL
+over the data for 5, 6, 7, 10, 13, 18 and 19; EL classification for 4, 12 and 16; QL rewriting
+into SQL for 8, 14 and 20; the DL tableau for 15 — and each has a specification in
+`docs/architectures/` with a section on the ontology it reasons with and why.
 
 **The rule they all obey: an answer is built from a walked graph.** Ranking finds where to start;
 it does not find an answer. Every `ask` chain builds a `Bundle` and answers from one, an objection

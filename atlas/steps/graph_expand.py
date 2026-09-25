@@ -21,7 +21,7 @@ node at the other end. A package that fits its budget by losing the one study th
 disagrees is worse than one that admits it is partial.
 
 **Nothing here names a relation.** Which predicates are worth following, which mean
-support and which mean dispute are the pack's words and arrive as options. The step
+support and which mean dispute are the ontology's words and arrive as options. The step
 knows only that some relations were pointed at.
 
 `Bundle` lives here rather than in `atlas/model/` by the rule in CLAUDE.md: it is not
@@ -88,10 +88,10 @@ class Bundle(Frozen):
 class GraphExpandOptions(Frozen):
     """Which relations to walk, how far, and which of them carry a position.
 
-    `follow` empty means every relation the pack declares; naming a few is how a
+    `follow` empty means every relation the ontology declares; naming a few is how a
     configuration says that only some of them explain anything about its questions.
-    `supports` and `opposes` are the pack's own predicate names, and the step neither
-    knows nor guesses them: a pack that spells them differently says so here.
+    `supports` and `opposes` are the ontology's own predicate names, and the step neither
+    knows nor guesses them: an ontology that spells them differently says so here.
     """
 
     depth: int = Field(DEPTH, ge=0)

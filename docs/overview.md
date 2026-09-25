@@ -18,11 +18,12 @@ flowchart TB
         I["ingest<br/>the text layer is<br/>fixed here, for good"]
         E["extract<br/>a model is asked for<br/>a verbatim quote"]
         R["relocate<br/>the quote is found<br/>in the text, or dropped"]
-        V["validate<br/>the pack judges<br/>the card"]
+        V["validate<br/>the ontology judges<br/>the card"]
         L["relate<br/>relations, bound to<br/>their own quotes"]
+        SH["shacl_validate<br/>closed world:<br/>what must be there"]
         A["assert<br/>written as a claim,<br/>never as a row"]
         X["index"]
-        I --> E --> R --> V --> L --> A --> X
+        I --> E --> R --> V --> L --> SH --> A --> X
     end
 
     subgraph STORE["the store — a history, not a table"]
@@ -39,13 +40,16 @@ flowchart TB
         RANK --> WALK --> ANS
     end
 
-    PACK[("ontology pack<br/>YAML · types · predicates<br/>hashed into schema_version")]
+    ONTO[("the ontology<br/>OWL 2 · Turtle · a module per profile<br/>+ SHACL shapes<br/>hashed into schema_version")]
+    ENG{{"the engines<br/>RDFS · RL over the data<br/>EL · DL over the ontology<br/>QL over a query"}}
 
     SRC --> BUILD --> STORE --> ASK --> OUT(["an answer whose every<br/>claim names its quote"])
-    PACK -.->|"loaded at run time"| BUILD
-    PACK -.-> ASK
+    ONTO -.->|"loaded, classified,<br/>held to a profile"| BUILD
+    ONTO -.-> ASK
+    ONTO --- ENG
+    ENG -.->|"derived facts, marked,<br/>on their premises' spans"| ASK
 
-    MANIFEST[["architectures/aNN.yaml<br/>the manifest: which packs,<br/>which steps, in which order"]]
+    MANIFEST[["architectures/aNN.yaml<br/>the manifest: which ontologies,<br/>which profile, which steps"]]
     MANIFEST -.-> BUILD
     MANIFEST -.-> ASK
 ```
@@ -85,7 +89,7 @@ erDiagram
         string text "the quote, stored beside them"
     }
     NODE {
-        string type "a term of the loaded pack"
+        string type "a class of the loaded ontology"
         dict fields
         string schema_version
     }
@@ -99,12 +103,14 @@ erDiagram
         string supersedes "what it replaces"
     }
     SCHEMA {
-        string version "the content hash of the packs"
+        string version "the content hash of ontologies and shapes"
+        Axiom_list axioms "OWL 2, reasoned over"
+        string profile "RDFS · EL · QL · RL · DL"
     }
 ```
 
-Not one of those boxes names a type, a field or a predicate of any subject. The types that
-used to be built in live in `packs/ml_paper.yaml` now, and it is loaded only when a
+Not one of those boxes names a class, a field or a relation of any subject. The classes that
+used to be built in live in `ontologies/ml_paper.ttl` now, and it is loaded only when a
 configuration names it. `tests/test_substrate.py` is the standing proof: it runs the shipped
 steps over an invented vocabulary, and a change under `atlas/` needed to make it pass means a
 domain has leaked into the core.
@@ -118,6 +124,7 @@ flowchart LR
         O1["Evidenced.spans has min_length=1"]
         O2["Span.of takes the text from the segment<br/>rather than being told it"]
         O3["a quote that cannot be located<br/>is dropped and counted"]
+        O4["a derived fact stands on its<br/>premises' spans, marked as derived"]
     end
     subgraph TWO["2 · The text layer is frozen at ingest"]
         direction TB
@@ -126,8 +133,8 @@ flowchart LR
     end
     subgraph THREE["3 · Every object names its schema"]
         direction TB
-        S1["schema_version = the content hash<br/>of the packs that were loaded"]
-        S2["a node written last month stays<br/>interpretable after today's pack edit"]
+        S1["schema_version = the content hash<br/>of the ontologies and shapes loaded"]
+        S2["a node written last month stays<br/>interpretable after today's ontology edit"]
     end
     subgraph FOUR["4 · Writing is asserting"]
         direction TB
@@ -160,9 +167,52 @@ Storage and IO live at the edge. Adding one is a module under `atlas/steps/`, an
 and a test — and a configuration that does not name it does not run it.
 
 That is the whole reason fifteen architectures are maintainable. They are fifteen orderings
-of forty-five steps, and the thing that varies between them is a file.
+of forty-eight steps, and the thing that varies between them is a file.
 
-## 5. The rule every architecture obeys
+## 5. The ontology is the working layer, and an engine reasons with it
+
+```mermaid
+flowchart TB
+    subgraph MODULES["one ontology, a module per profile"]
+        direction LR
+        BASE["science_core<br/>hierarchy · signatures<br/>disjoint classes"]
+        RLM["_rl<br/>transitive · inverse · chains<br/>sufficient conditions"]
+        ELM["_el<br/>definitions with<br/>existentials"]
+        QLM["_ql<br/>inverses · existentials<br/>on the right"]
+        DLM["_dl<br/>unions · cardinality<br/>universals"]
+        BASE --> RLM & ELM & QLM
+        RLM & ELM --> DLM
+    end
+
+    subgraph DATA["over the data: never invents an individual"]
+        RDFS["RDFS · 0"]
+        RL["OWL 2 RL · 5 6 7 10 13 18 19<br/>every fact with its derivation,<br/>every clash with its premises"]
+    end
+    subgraph TBOX["over the ontology: never materialises"]
+        EL["OWL 2 EL · 4 12 16<br/>the complete hierarchy,<br/>the empty classes"]
+        DL["OWL 2 DL tableau · 15<br/>has it a model? can each<br/>class have a member?"]
+    end
+    subgraph QUERY["over a query: never a row that is not stored"]
+        QL["OWL 2 QL · 8 14 20<br/>rewritten into SQL"]
+    end
+    SHACL["SHACL · closed world<br/>what a record must carry"]
+
+    RLM --> RL
+    ELM --> EL
+    QLM --> QL
+    DLM --> DL
+    BASE --> RDFS
+    SHACL -.->|"before assert"| DATA
+```
+
+Which engine an architecture runs follows from what its questions need the ontology to say,
+and a manifest names the profile as a contract: an ontology outside it is refused when the file
+is read, and `tests/test_catalogue.py` refuses an engine that is not complete for it. The line
+between the boxes is the first invariant again. RL cannot conclude that something exists which
+nobody mentioned, so it may run over what was extracted; EL, QL and DL can, so they are asked
+about the ontology or made to rewrite a query, and nothing they conclude is written down.
+
+## 6. The rule every architecture obeys
 
 ```mermaid
 flowchart LR
@@ -183,7 +233,7 @@ and a relation named under `opposes` is pulled into the package after the walk, 
 budget did. `tests/test_catalogue.py` checks all three over every manifest, which is the only
 way a rule stated in a document stays true.
 
-## 6. Where to look
+## 7. Where to look
 
 | I want to… | Read |
 |---|---|
@@ -191,7 +241,7 @@ way a rule stated in a document stays true.
 | know what must not break | `CLAUDE.md` |
 | continue somebody's work | `HANDOFF.md` |
 | understand the store, provenance, versioning | `docs/architecture.md` |
-| write an ontology pack | `docs/ontology.md` |
+| write an ontology, choose a profile, run an engine | `docs/ontology.md` |
 | choose between the fifteen | `docs/architectures/README.md` |
 | know what is measured, and how | `docs/evaluation.md` |
 

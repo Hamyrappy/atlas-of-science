@@ -2,7 +2,7 @@
 
 The types on offer are read out of whatever schema was loaded, so this module knows
 only that types have names, fields and a description, and nothing about what any of
-them mean; swapping the pack swaps the vocabulary without touching a line here. The
+them mean; swapping the ontology swaps the vocabulary without touching a line here. The
 model is asked for a verbatim quote and never for offsets, which `relocate` recovers.
 
 The noun a prompt uses for a segment is an option: a reader of PDFs calls them pages

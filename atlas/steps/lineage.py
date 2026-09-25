@@ -56,7 +56,7 @@ class Affected(Frozen):
 class LineageOptions(Frozen):
     """Which relations carry dependency, how far to follow them, and which way they point.
 
-    `follow` is the pack's own predicates -- what a result was derived from, what a
+    `follow` is the ontology's own predicates -- what a result was derived from, what a
     computation read, what it ran. `upstream` says the relations point from the
     dependent thing to what it depends on, which is how they are usually written: the
     walk then runs against them, from the cause to what stands on it.

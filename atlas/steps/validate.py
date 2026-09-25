@@ -5,7 +5,7 @@ markup it got, so an unknown type or an undeclared field costs one node and leav
 rest of the pass standing. The violations travel on in the state, because a count with
 no cases behind it says nothing about what went wrong.
 
-What is kept and what is dropped is the loaded pack's ruling, so there is nothing for
+What is kept and what is dropped is the loaded ontology's ruling, so there is nothing for
 a configuration to write under this name. It declares `options=Nothing`, and a file
 writing one anyway -- a `strict` that was never read -- is refused while it is read
 instead of running under a setting this step does not have.

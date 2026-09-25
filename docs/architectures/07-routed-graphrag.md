@@ -26,7 +26,7 @@ library.
 
 There is no text-only route. The overview route is not "summarise the top passages": it
 takes *whole communities*, capped, and says when the cap bound it. And a community
-report is not evidence — see §5, which is the design decision this architecture turns on.
+report is not evidence — see §6, which is the design decision this architecture turns on.
 
 It is also not a general-purpose planner. The router picks a *family* of computation;
 which operations run inside that family is fixed by the manifest. Architecture 20 is the
@@ -36,15 +36,33 @@ one that composes operations per question.
 
 | | |
 |---|---|
-| **Schema** | `science_core` + `scierc`. Unchanged by routing: the routes differ in retrieval, not in what is recorded. |
-| **Reasoner** | None. The router is markers first, one bounded model call at most. |
+| **Schema** | `science_core_rl` + `scierc_rl`, under `profile: RL`. Unchanged by routing: the routes differ in retrieval, not in what is recorded. |
+| **Reasoner** | OWL 2 RL (`entail`) over the stored graph before the walk, whichever route was taken, with derived links and inferred classes marked in the package. The router itself is markers first, one bounded model call at most. |
 | **Data** | The store as everywhere else. Communities and reports are computed per question and never asserted. |
 | **Components and reuse** | Greedy modularity agglomeration for the partition; the shared `Bundle`, `graph_expand` and `graph_answer` for all three routes. |
 | **Evolution** | A route that keeps being wrong is a marker set to fix or a model call to enable; a report that keeps missing something is a relation the partition should follow. Neither is a schema change. |
 
-## 4. Pipeline
+## 4. The ontology and the engine
 
-### 4.1 Build
+Routing changes where a walk starts, never what it walks over, and the ontology is part of
+what it walks over. So `entail` runs after the seeds are chosen and before the walk, on
+every route, with the whole OWL 2 RL rule table: a proposition some line disputes is a
+`ContestedProposition` (a sufficient condition in `science_core_rl`) whichever route
+reached it, `part_of` is followed transitively however the extractor phrased the steps,
+and a SciERC mention typed by two disjoint labels is a clash. `graph_expand_entailed`
+then walks the stored and the derived links together, and the package marks each derived
+link and says what each node was inferred to be, so the answer can say *inferred* where it
+leans on one.
+
+The overview route benefits most. A question about a whole field is answered from entire
+communities, and the inferred classes are what let a report say "four contested
+propositions" rather than "four propositions, some of which have a disputing line
+somewhere" — with the derivation behind every one of the four. Community reports are still
+derived text, not nodes, and still never cited in place of the work they summarise.
+
+## 5. Pipeline
+
+### 5.1 Build
 
 The ordinary chain. Routing is a property of asking, not of building:
 
@@ -52,10 +70,11 @@ The ordinary chain. Routing is a property of asking, not of building:
 ingest_pdf → extract_llm → relocate → validate → relate_llm → relate → assert → index_nodes
 ```
 
-### 4.2 Ask
+### 5.2 Ask
 
 ```
-index_nodes → route → communities → retrieve_routed → graph_expand → graph_answer → check_answer
+index_nodes → route → communities → retrieve_routed → entail → graph_expand_entailed
+            → graph_answer → check_answer
 ```
 
 **`route`** matches the configured markers against the question, in the order the routes
@@ -85,7 +104,7 @@ which is a true partition and a useless one.
 field does something is a question about a set, and a run that silently answered it from
 a sample would be answering a different question.
 
-## 5. The rule that makes an overview honest
+## 6. The rule that makes an overview honest
 
 **A community report is derived text and is not a node.** It has no span, it is never
 asserted, and `graph_answer` only accepts citations that resolve to nodes of the
@@ -102,7 +121,7 @@ being projected, so the next report simply does not contain it. There is no cach
 remember to clear, because the store is append-only and the projection is a function of
 it.
 
-## 6. Graph retrieval, exactly
+## 7. Graph retrieval, exactly
 
 ```
 question
@@ -111,7 +130,8 @@ question
   → seeds:
       fact / connections : top-k by term overlap
       overview           : all members of the best regions, capped, capping reported
-  → graph_expand: depth 3, budget 80, supports/opposes named
+  → entail: the RL closure over the stored graph, the same on every route
+  → graph_expand_entailed: depth 3, budget 80, supports/opposes named, derived links marked
   → graph_answer → check_answer
 ```
 
@@ -119,7 +139,7 @@ Note that all three routes end in the same two steps. That is deliberate: one ev
 package, one answering contract, one review. The routes differ where they should differ
 and nowhere else.
 
-## 7. Evolution
+## 8. Evolution
 
 New papers connect two previously separate regions. The partition changes on the next
 question and the reports change with it — and **that is not a schema change**. Only a
@@ -130,7 +150,7 @@ A route that is consistently wrong is diagnosed from `route_reason` over a batch
 questions: either a marker is missing, or the markers cannot decide this corpus's
 questions and `ask_model` should be on.
 
-## 8. Competency questions
+## 9. Competency questions
 
 | Question | Route | What it needs |
 |---|---|---|
@@ -138,7 +158,7 @@ questions and `ask_model` should be on.
 | Which directions use similar methods? | connections | A longer typed walk |
 | How has this field moved? | overview | Whole regions, with coverage stated |
 
-## 9. Risks and acceptance
+## 10. Risks and acceptance
 
 - **Router regret.** Measure it: run every question through every route and compare the
   answers with the route actually chosen. A router that is worse than always choosing
@@ -152,19 +172,21 @@ Acceptance: the overview route must never report a conclusion that only exists i
 report. Check it by citation — every line of an overview answer must cite nodes, and
 `check_answer` must show no omitted side.
 
-## 10. Running it
+## 11. Running it
 
 ```bash
 atlas run architectures/a07.yaml corpus/*.pdf --store store/
 atlas ask architectures/a07.yaml "how has this field moved?" --store store/
 ```
 
-## 11. Implementation
+## 12. Implementation
 
 | Part | Where |
 |---|---|
 | Routing | `atlas/steps/route.py` (`route`, `retrieve_routed`) |
 | Partition and reports | `atlas/steps/communities.py` (`communities`, `partition`) |
+| Vocabulary | `ontologies/science_core_rl.ttl`, `ontologies/scierc_rl.ttl` |
+| Engine | `atlas/reason/rl.py`, `atlas/steps/entail.py` (`entail`, `graph_expand_entailed`, `mark`) |
 | Shared walk and answer | `atlas/steps/graph_expand.py`, `atlas/steps/graph_answer.py`, `atlas/steps/check_answer.py` |
 | Manifest | `architectures/a07.yaml` |
-| Tests | `tests/test_route.py`, `tests/test_communities.py` |
+| Tests | `tests/test_route.py`, `tests/test_communities.py`, `tests/test_entail.py`, `tests/test_catalogue.py` |

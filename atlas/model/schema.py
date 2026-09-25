@@ -56,7 +56,7 @@ class TypeDef(Frozen):
     """One node type: what it is called here, what it is, and what it says.
 
     `disjoint_with` names the types nothing may be both of. It is an axiom and not a
-    hint: a pack that declares a type disjoint from one of its own ancestors has
+    hint: an ontology that declares a type disjoint from one of its own ancestors has
     declared a type nothing can satisfy, and a step that checks the ontology before a
     release says so rather than waiting for the first node to be refused.
 
@@ -339,7 +339,7 @@ class Schema(Frozen):
         return tuple(found)
 
     def disjoint(self, term: str, other: str) -> bool:
-        """Whether the pack forbids anything from being both of these types.
+        """Whether the ontology forbids anything from being both of these types.
 
         Disjointness is inherited downwards: a type declared disjoint from one is
         disjoint from everything under it, which is what makes the axiom worth
@@ -356,13 +356,13 @@ class Schema(Frozen):
         )
 
     def with_characteristic(self, characteristic: str) -> tuple[PredicateDef, ...]:
-        """The predicates a pack declared to behave this way; unknown words match nothing."""
+        """The predicates an ontology declared to behave this way; unknown words match nothing."""
         return tuple(p for p in self.predicates if characteristic in p.characteristics)
 
     def inverse(self, term: str) -> PredicateDef | None:
         """The predicate declared as this one's inverse, from either side of the pair.
 
-        A pack states the pair once, on whichever of the two it was more natural to
+        An ontology states the pair once, on whichever of the two it was more natural to
         write it on, and both directions answer -- otherwise half of every inverse
         would be derivable and the other half silently not.
         """

@@ -174,9 +174,33 @@ with pySHACL), in closed world, against two sets of shapes:
   depends on its own output through a chain (which OWL 2 DL cannot state of a transitive relation), a
   statement on two propositions, a result with no conditions.
 
-A violation refuses the object; a warning is recorded beside it and the object is kept. Validation
-runs with inference switched off: reasoning is the engines' job, and a validator that inferred as it
-validated would pass a node for being what it was only inferred to be.
+A violation refuses the object; a warning is recorded beside it and the object is kept. A domain or
+range check refuses the *relation*, not the node at its end: the node may be exactly what it says it
+is, and the relation the thing that was misread. `shacl_validate` runs before `assert`, reads a node
+already in the store as context when a relation reaches it, and never refuses what is stored.
+Validation runs with inference switched off: reasoning is the engines' job, and a validator that
+inferred as it validated would pass a node for being what it was only inferred to be.
+
+## The engines in the steps
+
+An engine is a library under `atlas/reason/`; a step runs it, and a configuration names the step.
+
+| step | engine | what it does with the ontology |
+|---|---|---|
+| `entail` | RL, or RDFS with `engine: rdfs` | closes the stored graph under the rules; `derived`, `typings`, `identities` and `clashes`, each with its derivation. `identity: [same_as]` gives a relation the meaning of `owl:sameAs` |
+| `classify` | EL, or the tableau with `engine: dl` | the hierarchy, the empty classes, and what the engine could not read |
+| `formal_check` | EL or the tableau | the gate a build chain starts with: cycles, empty classes, unknown terms, axioms outside the profile, an ontology with no model |
+| `shacl_validate` | SHACL | the record against the generated and the named shapes, before it is asserted |
+| `query` | QL | a conjunctive query, rewritten and answered over the store, the answers walked into a package |
+| `graph_expand_sql`, `execute_plan` | QL | the relations and classes a configuration or a plan names, rewritten before any SQL is written; the plan's trace records each rewriting |
+| `compile_units` | EL | an exact semantic unit as an axiom -- "all S are O" is `SubClassOf(S, O)` -- and the units that together leave a term with no possible member |
+| `promote` | EL | a proposal written as an OWL module, loaded and classified with the run's ontology before anybody reads it |
+
+The steps that read relations by name -- every selection step, `compare`, `lineage`, `align`,
+`reconcile` -- widen them with the QL rewriting of one relation and read the links an `entail` step
+derived, so a configuration that names `observed_under` also reaches `obtained_under`, which the
+process ontology declares a kind of it and derives through a property chain. Which of those links
+nobody claimed stays visible all the way to the answer.
 
 ## Identity, not labels
 

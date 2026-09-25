@@ -99,7 +99,7 @@ stopped holding is worse than no claim, because it is trusted.
 - `HANDOFF.md` — for whoever continues this: where the work stands, the standard the code is held
   to with the examples that show it, how to add the next architecture, and the traps already paid
   for. It changes when the state of the work changes, which is most commits that add a step.
-- `docs/architectures/` — one specification per architecture, eleven sections each so two can be
+- `docs/architectures/` — one specification per architecture, opening the same way so two can be
   read side by side, plus the rule they all obey.
 
 The rule: **a change that alters behaviour updates its document in the same commit.** New public

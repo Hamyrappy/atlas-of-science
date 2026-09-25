@@ -33,8 +33,8 @@ share a schema release, and not before.
 
 | | |
 |---|---|
-| **Schema** | A shared profile — `science_core` + a domain pack — that publishers agree on. Independent modules are what `versions` is for. |
-| **Reasoner** | None. What is computed is integrity and independence, both arithmetic. |
+| **Schema** | A shared ontology — `science_core_rl` + `scierc_rl` here — that publishers agree on, under `profile: RL`. Independent modules are what `versions` is for. |
+| **Reasoner** | OWL 2 RL over the snapshot (`entail` with `identity: [same_as]`), for one thing above all: which nodes are one individual. What `federate` and `count_independence` compute on top of that — integrity and independence — is arithmetic. |
 | **Data** | Each registry's own store, read; one local snapshot, built. The snapshot is a store like any other, so everything downstream is unchanged. |
 | **Components and reuse** | `Span.covers` for the integrity check; `open_store` for reading any registry the library can open; the shared `Bundle`. |
 | **Evolution** | A publisher moves to a new vocabulary and its records are **held** until somebody maps it. Connecting a new registry is a snapshot diff: new paths, new evidence, new conflicts. |
@@ -72,9 +72,35 @@ gap between them can be explained rather than argued about. `count_independence`
 over the evidence package, so the number an answer would quote is the number about what
 that answer actually rests on.
 
-## 6. Pipeline
+## 6. Identity, and the engine that decides it
 
-### 6.1 Build (at each node of the federation)
+Registries mint their own ids. One study published by two of them arrives as two nodes,
+and counting over nodes would count it twice — the same error as counting over
+publishers, one level down. Deciding that two records are one individual is what
+`owl:sameAs` means, and OWL 2 RL is the profile that can execute it over data: `eq-sym`,
+`eq-trans` and `eq-rep` make every fact about one a fact about the other, and `prp-fp` /
+`prp-ifp` derive an identity from a relation the ontology makes functional.
+
+`science_core_rl` declares `same_as` — symmetric, transitive, with `skos:closeMatch
+owl:sameAs` — and the manifest runs `entail: {identity: [same_as]}`, which gives it the
+meaning of `owl:sameAs` for this run and no other. Each identity the engine derives comes
+back in `identities`, with the rule and the premise, and `count_independence` reads them:
+
+```python
+counted.sources       # distinct sources behind the claims -- the honest number
+counted.individuals   # distinct things the claims are about, once identities are applied
+counted.identified    # the pairs the ontology made one, inside this package
+```
+
+Sources are still counted as sources. Two papers reporting one study are two independent
+reports of it, which is what a confirmation is; one study under two registry ids is one
+study, which is what `individuals` says. A `same_as` link is itself a claim with a span —
+somebody said the two records are one — so an identity is as retractable as anything
+else, and `supported` recomputes what still follows when it is withdrawn.
+
+## 7. Pipeline
+
+### 7.1 Build (at each node of the federation)
 
 ```
 ingest_pdf → extract_llm → relocate → validate → relate_llm → relate → assert → index_nodes
@@ -83,17 +109,18 @@ ingest_pdf → extract_llm → relocate → validate → relate_llm → relate �
 Ordinary. A publisher is just an Atlas; what makes it a federation member is that
 somebody else reads its store.
 
-### 6.2 Ask (at the Atlas doing the federating)
+### 7.2 Ask (at the Atlas doing the federating)
 
 ```
-federate → index_nodes → retrieve → graph_expand → count_independence → graph_answer
+federate → index_nodes → retrieve → entail{identity: same_as} → graph_expand_entailed
+         → count_independence → graph_answer
 ```
 
 `federate` runs first and produces the `store` everything downstream uses — so the
 snapshot is built, indexed and answered over in one chain, and the answer is about one
 state of the federation.
 
-## 7. Evolution
+## 8. Evolution
 
 **A publisher changes vocabulary.** Its new records are held, named, and waiting. The
 local Atlas does not rewrite their IRIs and does not guess a mapping: a class split into
@@ -105,7 +132,7 @@ graph are new, which evidence is new, and which conflicts are new. A conflict th
 appears on connecting a registry is a finding, and `reconcile` (architecture 6) is what
 classifies it.
 
-## 8. Competency questions
+## 9. Competency questions
 
 | Question | What the federation gives |
 |---|---|
@@ -113,7 +140,7 @@ classifies it.
 | Which disagreements are terminological? | Records held for an unmapped vocabulary, beside conflicts that survive mapping |
 | What changed when a registry was connected? | A snapshot diff: new nodes, new links, new conflicts |
 
-## 9. Risks and acceptance
+## 10. Risks and acceptance
 
 - **Version heterogeneity is the normal state**, not an exception. `versions` and the
   held queue are the machinery for it; a federation that accepted everything would be
@@ -127,7 +154,7 @@ classifies it.
 Acceptance: a test with two registries reading the same paper must report **one**
 independent confirmation and two registries. That is `test_three_registries_reading_one_paper_are_one_confirmation`.
 
-## 10. Running it
+## 11. Running it
 
 Point the manifest at the registries — store specifications exactly as a configuration
 names its own store:
@@ -145,12 +172,13 @@ ask:
 atlas ask architectures/a13.yaml "who independently confirms this?" --store store/
 ```
 
-## 11. Implementation
+## 12. Implementation
 
 | Part | Where |
 |---|---|
 | Syncing and checking | `atlas/steps/federate.py` (`federate`, `check`, `Held`) |
 | Counting confirmations | `atlas/steps/federate.py` (`independence`, `Counted`, `count_independence`) |
+| Identity | `ontologies/science_core_rl.ttl` (`same_as`); `atlas/reason/rl.py` (the equality rules); `atlas/steps/entail.py` (`Identity`) |
 | The integrity rule | `atlas/model/source.py` (`Span.covers`) |
 | Manifest | `architectures/a13.yaml` |
-| Tests | `tests/test_federate.py` |
+| Tests | `tests/test_federate.py` (two ids made one individual), `tests/test_rl.py` |
