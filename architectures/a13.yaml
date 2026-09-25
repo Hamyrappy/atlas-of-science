@@ -40,9 +40,17 @@ variant:
     a06: >-
       What is checked is the provenance of somebody else's record, not the quality of
       our own extraction.
+  reasoning: >-
+    OWL 2 RL with identity. Registries mint their own ids, so one study arrives as
+    several nodes; a `same_as` link makes them one individual with the meaning of
+    owl:sameAs and the equality rules of the RL table, and `count_independence` counts
+    individuals after identity and sources as sources. Two registries republishing one
+    paper stay one confirmation; one study under two ids is one study.
   spec: docs/architectures/13-federation.md
 
-schema: [science_core, scierc]
+schema:
+  ontologies: [science_core_rl, scierc_rl]
+  profile: RL
 
 steps:
   - ingest_pdf
@@ -58,6 +66,7 @@ ask:
   - federate
   - index_nodes
   - retrieve
-  - {graph_expand: {depth: 3, limit: 60, supports: [supports], opposes: [disputes]}}
+  - {entail: {identity: [same_as]}}
+  - {graph_expand_entailed: {depth: 3, limit: 60, supports: [supports], opposes: [disputes]}}
   - count_independence
   - graph_answer

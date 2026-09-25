@@ -1,6 +1,6 @@
 # Architecture 10 -- the materialised profile.
 #
-# What the pack's relation axioms imply is computed ahead of the question and kept
+# What the ontology implies is computed ahead of the question by the OWL 2 RL rules and kept
 # beside what was claimed, with the premises and the rule behind every consequence. The
 # answer says which is which.
 #
@@ -16,8 +16,9 @@ variant:
     of the question, every consequence carrying the premises it came from, and an answer
     that never presents an inference as something a source reported.
   mechanism: >-
-    `entail` closes the admitted relations under the three rules a pack can declare and
-    this library can execute, deduplicating a consequence that follows several ways
+    `entail` closes the admitted relations under the OWL 2 RL rule table -- transitivity,
+    inverses, symmetry, property chains, the sufficient conditions of defined classes --
+    deduplicating a consequence that follows several ways
     while keeping every derivation of it. Derived links are never asserted, carry the
     spans of their premises rather than an invented one, and are marked in their fields.
     `supported` recomputes what still follows after a retraction from the ground up, so
@@ -35,18 +36,27 @@ variant:
     - Which conclusions fall if this claim is withdrawn, and which still follow?
   differs:
     a15: >-
-      Expressiveness is traded for a closure that can actually be computed and kept; a
-      pack wanting more than three relation axioms is asking for a profile this does not
-      implement, and is told so.
+      Expressiveness is traded for a closure that can actually be computed and kept: an
+      axiom outside OWL 2 RL is refused by the profile the configuration names, rather
+      than silently ignored by the rules.
     a05: >-
       What is computed is what the ontology implies, not what a dependency chain reaches:
       one is an axiom, the other is a fact about how a result was produced.
+  reasoning: >-
+    OWL 2 RL, the whole rule table, run over the data ahead of the question:
+    transitivity, inverses, symmetry, property chains, the sufficient conditions of the
+    defined classes, and disjointness as clashes. Every consequence keeps its derivation
+    -- the rule's name in the W3C table, the premises, the axiom -- and `supported`
+    recomputes from the ground up after a retraction. The DL tableau checks the ontology
+    itself before a run writes under it.
   spec: docs/architectures/10-materialised-entailment.md
 
-schema: [science_core, science_map]
+schema:
+  ontologies: [science_core_rl, science_map_rl]
+  profile: RL
 
 steps:
-  - {formal_check: {strict: true}}
+  - {formal_check: {strict: true, engine: dl}}
   - ingest_pdf
   - {extract_llm: {segment: page}}
   - relocate
@@ -59,7 +69,7 @@ steps:
 ask:
   - index_nodes
   - retrieve
-  - {entail: {premises: [part_of, has_part, comparable_with, narrower], rounds: 8}}
+  - {entail: {rounds: 16}}
   - graph_expand_entailed:
       depth: 3
       limit: 80

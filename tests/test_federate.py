@@ -155,3 +155,38 @@ def test_the_step_counts_over_the_package_it_is_given() -> None:
 
     assert result["independence"].independent == 1
     assert result["independence"].registries == 2
+
+
+def test_two_ids_the_ontology_makes_one_individual_are_counted_once() -> None:
+    from atlas.model import Link
+    from atlas.ontology import load
+    from atlas.steps.entail import EntailOptions, entail
+
+    # Two registries minted two ids for one study, and a third said they are the same;
+    # the RL engine makes them one individual, and the count reads that.
+    schema = load("science_core_rl")
+    first = node("c" * 16, PAPER).model_copy(update={"type": "Study"})
+    second = node("d" * 16, OTHER, quote="A second laboratory").model_copy(
+        update={"type": "Study"})
+    same = Link.of(predicate="same_as", src=first.id, dst=second.id, spans=first.spans,
+                   schema_version=schema.version)
+    store = registry((PAPER, first), (OTHER, second))
+    store.assert_(Assertion(id="same", agent=AGENT, at="2026-01-01T00:00:00+00:00",
+                            target=same))
+    closed = entail({"store": store, "schema": schema}, EntailOptions(identity=("same_as",)))
+    bundle = Bundle(roots=(first.id,), nodes=(first, second))
+
+    counted = count_independence({"bundle": bundle, "identities": closed["identities"],
+                                  "origins": {first.id: ("one",), second.id: ("two",)}})
+
+    assert counted["independence"].individuals == 1
+    assert counted["independence"].identified == (tuple(sorted((first.id, second.id))),)
+    # Two sources are still two independent reports of the one study.
+    assert counted["independence"].sources == 2
+
+
+def test_without_identities_every_node_is_its_own_individual() -> None:
+    counted = independence([CLAIM, SECOND], {CLAIM.id: ("one",), SECOND.id: ("two",)})
+
+    assert counted.individuals == 2
+    assert counted.identified == ()

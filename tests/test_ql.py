@@ -125,3 +125,15 @@ def test_the_shipped_ql_ontology_rewrites_a_question_about_bearing_on_a_claim() 
     schema = load("science_core_ql")
     ucq = rewrite(parse("q(?l, ?p) :- bears_on(?l, ?p)"), tbox(schema.every_axiom()))
     assert {one.atoms[0].predicate for one in ucq} == {"bears_on", "supports", "disputes"}
+
+
+def test_a_relation_is_rewritten_with_the_direction_each_alternative_is_read_in() -> None:
+    from atlas.reason.ql import directed, relations
+
+    t = tbox(load("science_core_ql").axioms)
+
+    ways = directed(t, "part_of")
+
+    assert ("part_of", False) in ways
+    assert ("has_part", True) in ways
+    assert "has_part" in relations(load("science_core_ql").axioms, ["part_of"])

@@ -1,7 +1,7 @@
 # Architecture 4 -- discovery from the corpus, with a map that is not a taxonomy.
 #
-# The scientific core is imported up front and the corpus extends it: what the pack has
-# no word for is pooled, defined, checked against what already exists, and promoted only
+# The scientific core is imported up front and the corpus extends it: what the ontology
+# has no word for is pooled, defined, checked against what already exists, and promoted only
 # when there is a case for it. A separate topic layer maps what is discussed together,
 # and never becomes a class.
 #
@@ -11,9 +11,10 @@
 #   atlas run architectures/a04.yaml more/*.pdf   --store store/
 #   atlas ask architectures/a04.yaml "what has this corpus started calling new?" --store store/
 #
-# The proposal lands in the store directory as `proposal.yaml`. It is a file for a
-# person to read, not a pack: nothing here edits the vocabulary a corpus is marked up
-# against.
+# The proposal lands in the store directory as `proposal.ttl`: an OWL module importing
+# the ontology the run was under, loaded and classified with it before it is written.
+# It is a file for a person to read, not an edit: nothing here changes the vocabulary a
+# corpus is marked up against.
 
 variant:
   id: a04
@@ -24,10 +25,11 @@ variant:
     defined and gated, and a separate topic layer maps the field without pretending to
     classify it.
   mechanism: >-
-    A salience pass keeps the regions worth reading; whatever the pack refuses is pooled
+    A salience pass keeps the regions worth reading; whatever the ontology refuses is pooled
     by label overlap and counted in independent source families; a definition in genus
     and differentia is asked for, the closest existing term is reported, and a gate of
-    support, stability, definition and reuse decides what becomes a proposal. Topics are
+    support, stability, definition and reuse decides what becomes a proposal -- an OWL
+    module, classified with the ontology before anybody reads it. Topics are
     the connected groups of the graph and carry the kinds of their members, so a group
     of several kinds is visibly a subject area and not a class.
   family: dual-level retrieval
@@ -49,11 +51,21 @@ variant:
     a18: >-
       Groups are fixed, counted across rounds and checked; a diffusion ranks a
       neighbourhood for one question and leaves nothing behind.
+  reasoning: >-
+    OWL 2 EL, because what this architecture changes is the class hierarchy, and
+    EL classifies it completely in polynomial time. The ontology is classified before a
+    run writes under it; a proposal is an OWL module importing it, loaded and
+    classified again before anybody reads it, so a proposed class that would be empty,
+    a name that collides or an axiom outside the profile comes back as a problem rather
+    than as a file.
   spec: docs/architectures/04-corpus-induction.md
 
-schema: [science_core, science_map, scierc]
+schema:
+  ontologies: [science_core, science_map, scierc]
+  profile: EL
 
 steps:
+  - {classify: {engine: el, strict: true}}
   - ingest_pdf
   - {extract_llm: {segment: page}}
   - salience_llm:

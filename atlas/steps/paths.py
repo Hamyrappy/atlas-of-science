@@ -37,7 +37,8 @@ from pydantic import Field
 
 from atlas.model import Frozen
 from atlas.steps import State, register
-from atlas.steps.graph_expand import GraphExpandOptions, expand
+from atlas.steps.entail import mark
+from atlas.steps.graph_expand import GraphExpandOptions, expand, widened
 from atlas.steps.retrieve import Hit
 from atlas.walk import Adjacency, Walk, walks, weights
 
@@ -84,23 +85,26 @@ def select_paths(state: State, options: SelectPathsOptions) -> State:
     """Find the chains between what the question named, prune them, and package what is left."""
     store = state["store"]
     hits: tuple[Hit, ...] = state["hits"]
-    adjacency = Adjacency.of(store.links(), options.expand.follow)
+    schema = state.get("schema")
+    walked = widened(options.expand, schema) if schema is not None else options.expand
+    derived = tuple(state.get("derived", ()))
+    adjacency = Adjacency.of([*store.links(), *derived], walked.follow)
     roots = tuple(dict.fromkeys(hit.node.id for hit in hits))
     found = enumerate_paths(adjacency, roots, options)
-    kept = prune(found, options.keep, options.expand.opposes, adjacency)
+    kept = prune(found, options.keep, walked.opposes, adjacency)
     nodes = tuple(dict.fromkeys(
         [node_id for path in kept for node_id in path.walk.nodes] or list(roots)
     ))
     bundle = expand(
         store,
         nodes,
-        options.expand,
+        walked,
         reasons={path.walk.nodes[-1]: path.reason for path in kept},
         snapshot=getattr(state.get("schema"), "version", "") or "",
         method="select_paths",
         adjacency=adjacency,
     )
-    return {"bundle": bundle, "paths": kept}
+    return {"bundle": mark(bundle, derived, state.get("typings", ())), "paths": kept}
 
 
 def enumerate_paths(

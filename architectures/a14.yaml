@@ -43,9 +43,20 @@ variant:
     a05: >-
       No model is called at all on the tabular route, so nothing here can hallucinate a
       condition: what is not in a column is simply not in the graph.
+  reasoning: >-
+    OWL 2 QL, which exists for this: data that already lives in tables, read
+    through a mapping, and queried through an ontology that rewrites the question rather
+    than copying the data. The mapped rows go into a relational store, SHACL refuses a
+    mapped record that breaks a shape in closed world, and a question is rewritten by
+    the ontology into SQL over what the mapping produced.
   spec: docs/architectures/14-mapped-tables.md
 
-schema: [science_core]
+schema:
+  ontologies: [science_core_ql]
+  profile: QL
+  shapes: [science_core]
+
+store: {sqlite: {path: store/tables.db}}
 
 steps:
   - ingest_table
@@ -63,11 +74,12 @@ steps:
       links:
         - {predicate: produced_by, src: result, dst: study, span: study}
   - validate
+  - shacl_validate
   - {assert: {agent: run}}
   - index_nodes
 
 ask:
   - index_nodes
   - retrieve
-  - {graph_expand: {depth: 3, limit: 60, supports: [supports], opposes: [disputes]}}
+  - {graph_expand_sql: {depth: 3, limit: 60, supports: [supports], opposes: [disputes]}}
   - graph_answer

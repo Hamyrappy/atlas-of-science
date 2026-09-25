@@ -151,3 +151,55 @@ def test_a_baseline_that_recorded_nothing_does_not_find_that_everything_agrees(
     # Whichever of the two is taken as the baseline, one side knows nothing, and the
     # verdict has to reflect that rather than the side that happens to be first.
     assert comparison.verdict == "insufficient"
+
+
+def test_a_condition_the_ontology_carries_to_a_result_is_compared_on() -> None:
+    """Nobody linked the results to a condition; the RL chain did, and compare reads it.
+
+    `obtained_under` is `yielded` read backwards and then `under_condition`, and it is a
+    kind of `observed_under` -- so a configuration asking for `observed_under` compares the
+    two results on the conditions of the runs that yielded them, and each such relation is
+    marked as derived.
+    """
+    from atlas.model import Agent, Assertion, Link, Segment, Source, Span
+    from atlas.ontology import load
+    from atlas.steps.entail import EntailOptions, entail
+    from atlas.steps.graph_expand import Bundle
+    from atlas.store.memory import MemoryStore
+
+    text = "Run A at 20 C yielded 0.91. Run B at 20 C yielded 0.88."
+    source = Source(id="p", origin="p.txt", segments=(Segment(number=1, text=text),))
+    schema = load("process_rl")
+
+    def made(node_id: str, type_name: str, quote: str, **fields: str) -> Node:
+        start = text.index(quote)
+        return Node(id=node_id, type=type_name, fields=fields,
+                    spans=(Span.of(source, 1, start, start + len(quote)),),
+                    schema_version=schema.version)
+
+    nodes = [made("r1", "StudyResult", "0.91", value="0.91"),
+             made("r2", "StudyResult", "0.88", value="0.88"),
+             made("e1", "Experiment", "Run A", name="A"),
+             made("e2", "Experiment", "Run B", name="B"),
+             made("c1", "ExperimentalCondition", "20 C", name="temperature 20", unit="C"),
+             made("c2", "ExperimentalCondition", "at 20 C", name="temperature 20", unit="C")]
+    wiring = [("e1", "yielded", "r1"), ("e2", "yielded", "r2"),
+              ("e1", "under_condition", "c1"), ("e2", "under_condition", "c2")]
+    store = MemoryStore()
+    store.add_source(source)
+    agent = Agent(id="run", kind="run")
+    for index, target in enumerate([*nodes, *(
+            Link.of(predicate=p, src=a, dst=b, spans=nodes[0].spans,
+                    schema_version=schema.version) for a, p, b in wiring)]):
+        store.assert_(Assertion(id=f"a{index}", agent=agent, at="2026-01-01T00:00:00+00:00",
+                                target=target))
+    state = {"store": store, "schema": schema}
+    state |= entail(state, EntailOptions())
+    state["bundle"] = Bundle(roots=("r1",), nodes=tuple(store.get_nodes(["r1", "r2"])))
+
+    result = compare(state, CompareOptions(type="StudyResult", conditions=("observed_under",),
+                                           fields=("name", "unit")))
+
+    assert {one.predicate for one in state["derived"]} >= {"obtained_under"}
+    assert [one.verdict for one in result["comparisons"]] == ["comparable"]
+    assert result["comparisons"][0].matched == ("name", "unit")

@@ -21,9 +21,10 @@
 # enumerated here -- they are a run's configuration, checked by `compile_units` against what
 # it was told to accept, because which distinctions matter is a property of the corpus.
 #
-# `logic_profile` is filled by `compile_units`, not by an extractor: a unit that compiles
-# to an OWL axiom is placed in the OWL 2 profiles its axiom is in, and whether it can be
-# reasoned over at all is a judgement about completeness, not something to ask a model.
+# Whether a unit can be reasoned over is computed by `compile_units`, never asked of a
+# model: it is a judgement about completeness. An exact unit becomes an OWL axiom -- "all
+# S are O" is SubClassOf(S, O) -- which the EL engine checks against this ontology and the
+# other units, and `logic_profile` is where a record keeps the OWL 2 profiles it is in.
 
 @prefix units: <https://w3id.org/atlas-of-science/units#> .
 @prefix core:  <https://w3id.org/atlas-of-science/core#> .

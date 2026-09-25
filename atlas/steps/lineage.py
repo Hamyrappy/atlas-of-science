@@ -31,6 +31,7 @@ from pydantic import Field
 
 from atlas.model import Frozen, Node
 from atlas.steps import State, register
+from atlas.steps.entail import implied, widen
 from atlas.walk import LIMIT, Adjacency, Walk, reach
 
 DEPTH = 6
@@ -74,7 +75,7 @@ def lineage(state: State, options: LineageOptions) -> State:
     store = state["store"]
     causes = state["cause"]
     causes = (causes,) if isinstance(causes, str) else tuple(causes)
-    adjacency = Adjacency.of(store.links(), options.follow)
+    adjacency = Adjacency.of(implied(state), widen(state, options.follow))
     # The relations point from the dependent thing to what it depends on, so reaching
     # what depends on the cause means walking them backwards.
     found = reach(adjacency, causes, depth=options.depth, limit=options.limit,

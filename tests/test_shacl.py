@@ -48,7 +48,8 @@ def test_a_subclass_node_is_not_refused_for_fields_its_superclass_lacks() -> Non
 
 def test_a_relation_whose_subject_is_not_recorded_as_its_domain_is_refused() -> None:
     nodes = [node("ds", "Dataset", name="D"), node("p", "Proposition", expression="x")]
-    assert refused(nodes, [link("l", "supports", "ds", "p")]) == {"ds"}
+    # The relation is what is wrong; the dataset may be exactly what it says it is.
+    assert refused(nodes, [link("l", "supports", "ds", "p")]) == {"l"}
 
 
 def test_a_node_of_a_subclass_satisfies_a_domain_check() -> None:

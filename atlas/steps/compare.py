@@ -34,6 +34,7 @@ from pydantic import Field
 
 from atlas.model import Frozen, Node
 from atlas.steps import State, register
+from atlas.steps.entail import implied, widen
 from atlas.steps.graph_expand import Bundle
 from atlas.text import normalise
 from atlas.walk import Adjacency
@@ -103,7 +104,12 @@ def compare(state: State, options: CompareOptions) -> State:
     ]
     if not results:
         return {"comparisons": (), "comparable": 0}
-    adjacency = Adjacency.of(state["store"].links())
+    # The graph as the ontology makes it: a condition reached through a relation the
+    # ontology puts under a named one, or through a link the engine derived, counts.
+    options = options.model_copy(update={"conditions": widen(state, options.conditions),
+                                         "comparable": widen(state, options.comparable)})
+    links = implied(state)
+    adjacency = Adjacency.of(links)
     held = {node.id: node for node in state["store"].nodes()}
     conditions = {
         node.id: _conditions(node, adjacency, held, options) for node in results

@@ -68,7 +68,7 @@ proc:ExecutionStep a owl:Class ;
     atlas:fields ( field:name field:order field:definition ) ; atlas:labelField field:name .
 
 repro:ExperimentalCondition a owl:Class ;
-    atlas:name "ExperimentalCondition" ; rdfs:subClassOf obo:IAO_0000030 ;
+    atlas:name "ExperimentalCondition" ; rdfs:subClassOf core:Context ;
     skos:definition "One condition a run was carried out under, with its value and its unit." ;
     atlas:fields ( field:name field:value field:unit field:definition ) ; atlas:labelField field:name .
 
@@ -113,7 +113,7 @@ proc:yielded a owl:ObjectProperty ;
 
 proc:obtainedUnder a owl:ObjectProperty ;
     atlas:name "obtained_under" ; rdfs:domain sepio:StudyResult ;
-    rdfs:range repro:ExperimentalCondition ;
+    rdfs:range repro:ExperimentalCondition ; rdfs:subPropertyOf core:observedUnder ;
     skos:definition "The result was obtained under this condition, because the run that yielded it was. Inferred by a property chain in the RL module; an extractor may assert it too." .
 
 proc:plannedFor a owl:ObjectProperty ;

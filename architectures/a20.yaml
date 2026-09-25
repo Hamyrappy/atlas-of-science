@@ -1,7 +1,7 @@
 # Architecture 20 -- the answer as a plan of typed graph operations.
 #
 # A compound question is a composition, not a retrieval. Here it is written as a plan,
-# checked against the pack before anything runs, executed step by step, and each step
+# checked against the ontology before anything runs, executed step by step, and each step
 # keeps the witnesses it stood on.
 #
 #   atlas ask architectures/a20.yaml "which results were obtained under which conditions?" \
@@ -13,11 +13,11 @@ variant:
   title: Answering by a plan of typed graph operators
   summary: >-
     A small read-only operator language -- resolve, traverse, filter, join, aggregate,
-    compare, oppose -- type-checked against the loaded pack before execution, executed
+    compare, oppose -- type-checked against the loaded ontology and rewritten by it before execution, executed
     with a trace, and packaged by the shared evidence closure.
   mechanism: >-
-    The plan is checked once, as a whole: a relation the pack does not declare or a type
-    it does not know stops it before anything runs, which is what makes accepting a
+    The plan is checked once, as a whole: a relation the ontology does not declare or a
+    class it does not have stops it before anything runs, which is what makes accepting a
     generated plan safe rather than hopeful. An operator that reached nothing records the
     reason and the plan continues, so the trace names the step that emptied the answer
     rather than merely reporting that it is empty. An aggregate counts the whole selected
@@ -42,9 +42,16 @@ variant:
     a06: >-
       The agents there improve how knowledge is built; the plan here improves how a
       question is answered over what was already built.
+  reasoning: >-
+    OWL 2 QL, because a plan is a conjunctive query written one operator at a time:
+    `resolve` of a class is rewritten into every stored way of being one, `traverse` of
+    a relation into every relation the ontology puts under it and every inverse, and
+    each step's rewriting is kept in the trace beside its witnesses.
   spec: docs/architectures/20-operator-plan.md
 
-schema: [science_core, scierc]
+schema:
+  ontologies: [science_core_ql, process, scierc_ql]
+  profile: QL
 
 steps:
   - ingest_pdf

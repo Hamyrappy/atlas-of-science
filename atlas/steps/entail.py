@@ -1,219 +1,233 @@
-"""Computing what the relations declared in the pack imply, and remembering why.
+"""Working out what the ontology implies about the markup, and remembering why.
 
-A pack that says a relation is transitive has said something executable: if A is part of
-B and B is part of C then A is part of C, and a question about A ought to find C without
-anybody having asserted the third link. This step computes those consequences ahead of
-the question, which is what makes them cheap to query, and keeps for every one of them
-the premises and the rule it came from, which is what makes them safe to use.
+An ontology that says a relation is transitive, that two relations are inverses, that a
+line of argument disputing some proposition makes it contested, has said something
+executable. This step executes it: the OWL 2 RL engine (`atlas/reason/rl.py`) closes the
+nodes and links of the store -- and of the run, when it is called before anything is
+written -- under the ontology's axioms, ahead of the question, which is what makes the
+consequences cheap to query, and keeps for every one of them the rule, the premises and
+the axiom it came from, which is what makes them safe to use.
 
-Four rules, and each is a way a materialisation turns into a lie.
+The engine is named in the options: `rl`, the default, applies every OWL 2 RL rule the
+ontology gives it something to apply; `rdfs` applies the four RDFS entailments and nothing
+else, which is what the control architecture runs. No other engine may run here, because
+no other one can be run over data without inventing individuals nobody mentioned.
 
-**Derived is never asserted.** What comes back is a separate collection, not a write to
-the store. A derived link carries the spans of its premises rather than one of its own,
-which is the truthful thing to do since no text says it, and it is marked derived in its
-own fields. `assert_derived` exists and is off by default; a run that turns it on is
-recording that *the system* inferred this, under an agent of its own.
+What comes out, and the rules that hold of it:
 
-**Every derived link carries its derivation.** Premises, rule, and the schema version
-the rule came from. A consequence nobody can explain is a consequence nobody can check,
-and an answer that quoted one would be quoting the system's own inference back at the
-reader as if a source had said it.
+**Derived is never asserted.** `derived` are links, `typings` are nodes the ontology makes
+members of a further class, `identities` are pairs it makes one individual, and `clashes`
+are sets of facts it says cannot all hold. None of it is written to the store. A derived
+link carries the spans of its premises rather than one of its own -- no text says it --
+and is marked derived in its own fields. `assert_derived` exists and is off by default; a
+run that turns it on records that *the system* inferred this, under an agent of its own.
 
-**Only admitted premises are used.** A run names which relations may be reasoned over,
-and a claim somebody disputes does not become a premise merely by being in the store.
-"The author disputes P" must not become "not P" anywhere in the graph, and what prevents
-that here is that the closure runs over relations the configuration admitted.
+**Every consequence carries its derivation.** The rule by the OWL 2 RL table's name and by
+a word, the premises, and the axiom. A consequence nobody can explain is one nobody can
+check, and an answer that quoted one would be quoting the system's own inference back at
+the reader as if a source had said it.
+
+**Only admitted premises are used.** A run names which relations may be reasoned from, and
+a claim somebody disputes does not become a premise merely by being in the store. A node's
+own type is always admitted: it is what the node asserts about itself.
+
+**A contradiction is reported, not repaired.** A clash names the facts that cannot all
+hold. Which one is wrong is a reviewer's question, and an engine that dropped one of them
+to make the rest consistent would be answering it without saying so.
 
 **Retraction is computed, not assumed.** `invalidated` takes what has been withdrawn and
 returns the derivations that no longer stand -- separately from the ones that also follow
-from premises that survive, because those are not lost and a step that dropped them
-would overstate the damage.
+from premises that survive, because those are not lost and a step that dropped them would
+overstate the damage.
+
+**A relation from a thing to itself, derived by closing a cycle, is not emitted.** The
+engine derives it -- an irreflexive relation needs it to find the cycle -- but as a link
+in a package it says nothing a reader can use.
 """
 
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Iterable, Mapping
 from typing import Literal
 
 from pydantic import Field
 
-from atlas.model import Frozen, Link, Schema
-from atlas.model.schema import SYMMETRIC, TRANSITIVE
+from atlas.model import Frozen, Link, Node, Schema, Span
+from atlas.reason.facts import SAME, TYPE, Clash, Derivation, Fact
+from atlas.reason.rl import MAX_FACTS, RDFS, RL
+from atlas.reason.rl import reason as run_rl
+from atlas.reason.rl import supported as _supported
 from atlas.steps import State, register
 from atlas.steps.graph_expand import GraphExpandOptions, expand
 from atlas.steps.retrieve import Hit
 from atlas.walk import Adjacency
 
-Rule = Literal["transitive", "symmetric", "inverse"]
-"""The consequences this library computes. Three, because these are the three a pack can
-declare and a closure can compute without either a reasoner or a decision about what to
-do when it fails to terminate."""
-
-ROUNDS = 8
-"""How many times a transitive closure is extended before it is taken as it stands. A
-chain longer than this leaves the closure reported unfinished rather than truncated
-silently."""
+ROUNDS = 32
+"""How many rounds the closure runs before it is taken as it stands. A chain longer than
+this leaves the closure reported unfinished rather than truncated silently."""
 
 DERIVED = "derived"
 """The field a derived link carries, naming the rule it came from. A reader of the store
 must be able to tell an inference from a claim by looking at the object."""
 
+Engine = Literal["rl", "rdfs"]
 
-class Derivation(Frozen):
-    """Why one derived link holds: the rule, what it was derived from, under what schema."""
 
-    link_id: str
-    rule: Rule
-    premises: tuple[str, ...]
-    predicate: str
-    schema_version: str = ""
+class Typing(Frozen):
+    """A node the ontology makes a member of a further class, and the fact that says so."""
 
-    def rests_on(self, withdrawn: Iterable[str]) -> bool:
-        """Whether any of the premises is among what has been withdrawn."""
-        return bool(set(self.premises) & set(withdrawn))
+    node_id: str
+    type: str
+    fact: str
+
+
+class Identity(Frozen):
+    """Two individuals the ontology makes one, and the fact that says so."""
+
+    first: str
+    second: str
+    fact: str
 
 
 class Closure(Frozen):
-    """Everything one pass of the closure produced, and whether it finished.
+    """Everything one run of the engine produced, and whether it finished.
 
-    `given` is the asserted links it started from. It is kept because support has to be
-    computed from the ground up: a derived relation may be a premise of another derived
-    relation, and asking whether a consequence survives a retraction means asking what
+    `given` is the asserted facts it started from -- link ids and node ids. It is kept
+    because support has to be computed from the ground up: a derived relation may be a
+    premise of another, and whether a consequence survives a retraction depends on what
     still follows from what somebody actually claimed.
     """
 
     links: tuple[Link, ...] = ()
+    typings: tuple[Typing, ...] = ()
+    identities: tuple[Identity, ...] = ()
+    clashes: tuple[Clash, ...] = ()
     derivations: tuple[Derivation, ...] = ()
     given: tuple[str, ...] = ()
+    ignored: tuple[str, ...] = Field(
+        default=(), description="Axioms outside the engine's profile, which it did not apply"
+    )
     finished: bool = True
 
     def __len__(self) -> int:
-        return len(self.links)
+        return len(self.links) + len(self.typings) + len(self.identities)
 
 
 class EntailOptions(Frozen):
-    """Which relations may be reasoned over, and how far a transitive chain is followed.
+    """Which engine, which relations may be reasoned from, and how far.
 
-    `premises` empty means every relation the pack declares a characteristic for, which
-    is the right default for a pack whose RBox was written deliberately. Naming a few is
-    how a run says that only some of them may be used as grounds -- the difference
-    between computing what the ontology implies and computing what everything in the
-    store implies.
+    `premises` empty means every relation, which is the right default for an ontology
+    whose axioms were written deliberately. Naming a few is how a run says that only some
+    of them may be used as grounds -- the difference between computing what the ontology
+    implies and computing what everything in the store implies. `identity` names the
+    relations whose assertion makes two individuals one; nothing is one by default.
     """
 
+    engine: Engine = "rl"
     premises: tuple[str, ...] = ()
+    identity: tuple[str, ...] = ()
     rounds: int = Field(ROUNDS, ge=1)
+    max_facts: int = Field(MAX_FACTS, gt=0)
     assert_derived: bool = False
 
 
 @register("entail", requires=("store", "schema"),
-          produces=("derived", "derivations", "closure", "closure_finished"),
+          produces=("derived", "typings", "identities", "clashes", "derivations", "closure",
+                    "closure_finished"),
           options=EntailOptions)
 def entail(state: State, options: EntailOptions) -> State:
-    """Compute the relations the pack's own axioms imply, with the derivation of each."""
+    """Close the markup under the ontology, with the derivation of every consequence."""
     schema: Schema = state["schema"]
-    asserted = tuple(
-        link for link in state["store"].links()
+    store = state["store"]
+    nodes = _unique([*store.nodes(), *state.get("nodes", ())])
+    links = _unique([*store.links(), *state.get("links", ())])
+    admitted = tuple(
+        link for link in links
         if not options.premises or link.predicate in options.premises
+        or link.predicate in options.identity
     )
-    closure = close(asserted, schema, rounds=options.rounds)
-    # The closure travels whole as well as in pieces: `invalidated` needs the asserted
-    # links it started from, and a step that rebuilt them from the store would be
-    # answering about a different snapshot.
-    return {"derived": closure.links, "derivations": closure.derivations,
-            "closure": closure, "closure_finished": closure.finished}
+    closure = close(admitted, schema, rounds=options.rounds, nodes=nodes,
+                    engine=options.engine, identity=options.identity,
+                    max_facts=options.max_facts)
+    # The closure travels whole as well as in pieces: `invalidated` needs the facts it
+    # started from, and a step that rebuilt them from the store would be answering about
+    # a different snapshot.
+    return {"derived": closure.links, "typings": closure.typings,
+            "identities": closure.identities, "clashes": closure.clashes,
+            "derivations": closure.derivations, "closure": closure,
+            "closure_finished": closure.finished}
 
 
-def close(asserted: Iterable[Link], schema: Schema, rounds: int = ROUNDS) -> Closure:
-    """Everything the pack's relation axioms imply from these links, with every derivation.
+def close(
+    asserted: Iterable[Link],
+    schema: Schema,
+    rounds: int = ROUNDS,
+    *,
+    nodes: Iterable[Node] = (),
+    engine: Engine = "rl",
+    identity: Iterable[str] = (),
+    max_facts: int = MAX_FACTS,
+) -> Closure:
+    """Everything the ontology implies from these links and nodes, with every derivation.
 
-    Runs to a fixed point or to `rounds`, whichever comes first, and says which. The
-    three rules are applied together on each round, so a symmetric link can feed a
-    transitive chain and an inverse can feed both.
-
-    One relation is one link and may have **several derivations**. A consequence that
-    follows two ways is not two consequences -- deduplicating it by what it relates is
-    what stops a closure from growing a copy per path -- but both derivations are kept,
-    because that is exactly what tells a reviewer, after a retraction, whether the
-    consequence has fallen or merely lost one of its grounds.
+    One consequence may have **several derivations**. A consequence that follows two ways is
+    not two consequences -- it has one id, from what it states -- but both derivations are
+    kept, because that is exactly what tells a reviewer, after a retraction, whether it has
+    fallen or merely lost one of its grounds.
     """
-    held: dict[str, Link] = {link.id: link for link in asserted}
-    given = set(held)
-    known: dict[tuple[str, str, str], str] = {
-        (link.predicate, link.src, link.dst): link.id for link in held.values()
-    }
-    derivations: list[Derivation] = []
-    recorded: set[tuple[str, Rule, tuple[str, ...]]] = set()
-    transitive = {p.name for p in schema.with_characteristic(TRANSITIVE)}
-    symmetric = {p.name for p in schema.with_characteristic(SYMMETRIC)}
-    finished = False
-    for _round in range(max(rounds, 1)):
-        found = [
-            *_symmetric(held.values(), symmetric, schema),
-            *_inverse(held.values(), schema),
-            *_transitive(held.values(), transitive, schema),
-        ]
-        fresh = False
-        for link, why in found:
-            key = (link.predicate, link.src, link.dst)
-            existing = known.get(key)
-            if existing is None:
-                held[link.id] = link
-                known[key] = link.id
-                existing = link.id
-                fresh = True
-            why = why.model_copy(update={"link_id": existing})
-            mark = (why.link_id, why.rule, why.premises)
-            if mark not in recorded:
-                recorded.add(mark)
-                derivations.append(why)
-                fresh = fresh or existing not in given
-        if not fresh:
-            finished = True
-            break
+    links = list(asserted)
+    nodes = list(nodes)
+    facts = [Fact(id=node.id, subject=node.id, predicate=TYPE,
+                  object=_name(schema, node.type)) for node in nodes]
+    facts += [Fact(id=link.id, subject=link.src, predicate=link.predicate, object=link.dst)
+              for link in links]
+    result = run_rl(facts, schema.every_axiom(), rules=RDFS if engine == "rdfs" else RL,
+                    identity=tuple(identity), rounds=rounds, max_facts=max_facts,
+                    schema_version=schema.version)
+    spans = _spans(nodes, links, result.derivations)
+    derived_links: list[Link] = []
+    typings: list[Typing] = []
+    identities: list[Identity] = []
+    rule_of = {one.link_id: one.rule for one in result.derivations}
+    for fact in result.derived():
+        if fact.predicate == TYPE:
+            typings.append(Typing(node_id=fact.subject, type=fact.object, fact=fact.id))
+        elif fact.predicate == SAME:
+            identities.append(Identity(first=fact.subject, second=fact.object, fact=fact.id))
+        elif fact.subject != fact.object and fact.id in spans:
+            derived_links.append(Link(
+                id=fact.id, predicate=fact.predicate, src=fact.subject, dst=fact.object,
+                spans=spans[fact.id], schema_version=schema.version,
+                fields={DERIVED: rule_of.get(fact.id, "")},
+            ))
     return Closure(
-        links=tuple(held[link_id] for link_id in sorted(held) if link_id not in given),
-        derivations=tuple(sorted(derivations, key=lambda one: (one.link_id, one.premises))),
-        given=tuple(sorted(given)),
-        finished=finished,
+        links=tuple(derived_links),
+        typings=tuple(typings),
+        identities=tuple(identities),
+        clashes=result.clashes,
+        derivations=result.derivations,
+        given=result.given,
+        ignored=tuple(one.text() for one in result.ignored),
+        finished=result.finished,
     )
 
 
 def supported(closure: Closure, withdrawn: Iterable[str] = ()) -> set[str]:
-    """Every link that still follows from something somebody claimed, after a retraction.
+    """Every fact that still follows from something somebody claimed, after a retraction.
 
-    Computed from the ground up rather than by marking: start with the asserted links
-    that were not withdrawn, then repeatedly add any derived link one of whose
-    derivations has all its premises already standing, until nothing more is added.
-
-    Building it upwards is what makes it right. A derived relation can be a premise of
-    another derived relation, and those can support each other in a circle -- A implies
-    B by one rule and B implies A by another. Marking downwards from what was withdrawn
-    leaves such a pair standing on nothing but itself, and reports a retraction as
-    harmless when it was not.
+    Built upwards from the given facts that were not withdrawn; see
+    `atlas.reason.rl.supported`, which this is, and why marking downwards would leave two
+    consequences that support each other standing on nothing.
     """
-    gone = set(withdrawn)
-    stands = {link_id for link_id in closure.given if link_id not in gone}
-    ways: dict[str, list[Derivation]] = {}
-    for one in closure.derivations:
-        ways.setdefault(one.link_id, []).append(one)
-    growing = True
-    while growing:
-        growing = False
-        for link_id, reasons in ways.items():
-            if link_id in stands or link_id in gone:
-                continue
-            if any(all(premise in stands for premise in one.premises) for one in reasons):
-                stands.add(link_id)
-                growing = True
-    return stands
+    from atlas.reason.rl import Closure as Engine
+
+    return _supported(Engine(derivations=closure.derivations, given=closure.given), withdrawn)
 
 
 def invalidated(
     closure: Closure, withdrawn: Iterable[str]
 ) -> tuple[tuple[Derivation, ...], tuple[Derivation, ...]]:
-    """What falls when these links are withdrawn, and what still follows on other grounds.
+    """What falls when these are withdrawn, and what still follows on other grounds.
 
     Two collections, not one. A consequence derived two ways -- once from a premise that
     has gone and once from premises that have not -- is still derivable, and reporting it
@@ -244,84 +258,99 @@ def graph_expand_entailed(state: State, options: GraphExpandOptions) -> State:
         method="graph_expand_entailed",
         adjacency=adjacency,
     )
-    # The package must be able to say which of its relations nobody claimed, because an
-    # answer that presents an inference as a report of a source is the failure this
-    # architecture exists to prevent.
-    inferred = {link.id for link in derived}
-    return {"bundle": bundle.model_copy(update={
-        "derived": tuple(link.id for link in bundle.links if link.id in inferred),
-    })}
+    return {"bundle": mark(bundle, derived, state.get("typings", ()))}
 
 
-def _derived(
-    predicate: str, src: str, dst: str, premises: tuple[Link, ...], rule: Rule, schema: Schema
-) -> tuple[Link, Derivation]:
-    """One consequence and its derivation, standing on the evidence of its premises.
+def mark(bundle, derived: Iterable[Link], typings: Iterable[Typing] = ()):  # noqa: ANN001, ANN201
+    """Say which relations of a package nobody claimed, and what the ontology makes each node.
 
-    The spans are the premises' own: no text says the consequence, and inventing one
-    would put a claim in the store nothing supports. The id hashes the rule in with the
-    rest, so a relation that is both asserted and derivable is two objects and the
-    asserted one is not overwritten by the inference.
+    The package must be able to say which of its relations are inferences, because an
+    answer that presents one as a report of a source is the failure this step exists to
+    prevent; and an inferred class goes into the reason a node is there, where an answer
+    can use it -- "a contested proposition" -- and say it was inferred.
     """
-    spans = premises[0].spans
-    material = "\x00".join([rule, src, predicate, dst, *sorted(one.id for one in premises)])
-    link = Link(
-        id=hashlib.sha256(material.encode("utf-8")).hexdigest()[:16],
-        predicate=predicate,
-        src=src,
-        dst=dst,
-        spans=spans,
-        schema_version=schema.version,
-        fields={DERIVED: rule},
-    )
-    return link, Derivation(link_id=link.id, rule=rule, predicate=predicate,
-                            premises=tuple(sorted(one.id for one in premises)),
-                            schema_version=schema.version)
+    inferred = {link.id for link in derived}
+    reasons = dict(bundle.reasons)
+    held = {node.id for node in bundle.nodes}
+    classes: dict[str, list[str]] = {}
+    for one in typings:
+        if one.node_id in held:
+            classes.setdefault(one.node_id, []).append(one.type)
+    for node_id, names in classes.items():
+        said = f"inferred to be {', '.join(sorted(set(names)))}"
+        reasons[node_id] = f"{reasons[node_id]}; {said}" if node_id in reasons else said
+    return bundle.model_copy(update={
+        "derived": tuple(link.id for link in bundle.links if link.id in inferred),
+        "reasons": reasons,
+    })
 
 
-def _transitive(
-    links: Iterable[Link], transitive: set[str], schema: Schema
-) -> list[tuple[Link, Derivation]]:
-    """A -> B -> C becomes A -> C, for the relations the pack declared transitive."""
-    by_predicate: dict[str, list[Link]] = {}
-    for link in links:
-        if link.predicate in transitive:
-            by_predicate.setdefault(link.predicate, []).append(link)
-    found = []
-    for predicate, group in by_predicate.items():
-        outgoing: dict[str, list[Link]] = {}
-        for link in group:
-            outgoing.setdefault(link.src, []).append(link)
-        for first in group:
-            for second in outgoing.get(first.dst, ()):
-                if second.dst == first.src:
-                    continue  # A -> B -> A says nothing new and loops the closure.
-                found.append(_derived(predicate, first.src, second.dst, (first, second),
-                                      "transitive", schema))
-    return found
+def implied(state: State) -> tuple[Link, ...]:
+    """The graph as the ontology makes it: the store's links, and what an `entail` step derived.
+
+    When an `entail` step ran earlier in the chain, every link its engine derived is in
+    `derived`, marked in its fields and standing on its premises' spans; a step that reads
+    relations through this reads them as the ontology makes them, and can still tell which
+    ones nobody claimed.
+    """
+    return (*state["store"].links(), *state.get("derived", ()))
 
 
-def _symmetric(
-    links: Iterable[Link], symmetric: set[str], schema: Schema
-) -> list[tuple[Link, Derivation]]:
-    """A -> B becomes B -> A, for the relations the pack declared symmetric."""
-    return [
-        _derived(link.predicate, link.dst, link.src, (link,), "symmetric", schema)
-        for link in links
-        if link.predicate in symmetric and link.src != link.dst
-    ]
+def widen(state: State, names: Iterable[str]) -> tuple[str, ...]:
+    """Relation names widened to every relation the loaded ontology makes a kind of one.
 
+    The QL rewriting of a single relation (`atlas.reason.ql.relations`): `observed_under`
+    also means whatever the ontology declares a sub-relation of it, or the inverse of one.
+    Without a schema the names are returned as written.
+    """
+    names = tuple(names)
+    schema = state.get("schema")
+    if schema is None or not names:
+        return names
+    from atlas.reason.ql import relations
 
-def _inverse(links: Iterable[Link], schema: Schema) -> list[tuple[Link, Derivation]]:
-    """A -p-> B becomes B -q-> A, where the pack declared q the inverse of p."""
-    found = []
-    for link in links:
-        other = schema.inverse(link.predicate)
-        if other is not None:
-            found.append(_derived(other.name, link.dst, link.src, (link,), "inverse", schema))
-    return found
+    return relations(schema.every_axiom(), names)
 
 
 def derived_of(bundle_links: Iterable[Link]) -> Mapping[str, str]:
     """Which links of a package were inferred, and by which rule; the rest are claims."""
     return {link.id: link.fields[DERIVED] for link in bundle_links if DERIVED in link.fields}
+
+
+def _spans(nodes: list[Node], links: list[Link],
+           derivations: Iterable[Derivation]) -> dict[str, tuple[Span, ...]]:
+    """What each derived fact stands on: the spans of its first premise that has any.
+
+    No text says the consequence, so it carries the evidence of what it came from. A
+    derived fact may itself be a premise, so this runs until every derivation whose
+    premises have evidence has lent it to its fact.
+    """
+    known: dict[str, tuple[Span, ...]] = {one.id: one.spans for one in (*nodes, *links)}
+    pending = sorted(derivations, key=lambda one: (one.link_id, one.premises))
+    growing = True
+    while growing:
+        growing = False
+        for one in pending:
+            if one.link_id in known:
+                continue
+            found = next((known[p] for p in one.premises if p in known), None)
+            if found is not None:
+                known[one.link_id] = found
+                growing = True
+    return known
+
+
+def _name(schema: Schema, type_name: str) -> str:
+    found = schema.find_type(type_name)
+    return found.name if found is not None else type_name
+
+
+def _unique(items: Iterable) -> list:
+    seen: dict[str, object] = {}
+    for one in items:
+        seen.setdefault(one.id, one)
+    return list(seen.values())
+
+
+__all__ = ["DERIVED", "Closure", "EntailOptions", "Identity", "Typing", "close", "derived_of",
+           "entail", "graph_expand_entailed", "invalidated", "mark", "supported"]

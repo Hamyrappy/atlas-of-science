@@ -21,12 +21,20 @@ mean the thing being measured is not the thing that ran.
 `links_touching` finds the relations of the named opposing kinds that touch anything in
 the neighbourhood, including the ones whose other end the walk never reached. Those are
 precisely the ones a bounded query would otherwise lose, which is why the query exists.
+
+**The ontology rewrites what is asked for, as OWL 2 QL does.** A relation named in the
+options is widened to every relation the ontology makes a kind of it before a query is
+written -- `disputes` also fetches whatever is declared a sub-relation of it, or the inverse
+of one -- so the store is asked, in plain SQL, for everything the ontology implies about the
+neighbourhood and not only what was spelled the way the configuration spelled it. That is
+ontology-based data access in its smallest form: the ontology works on the query, and the
+database never learns it exists.
 """
 
 from __future__ import annotations
 
 from atlas.steps import State, register
-from atlas.steps.graph_expand import GraphExpandOptions, expand
+from atlas.steps.graph_expand import GraphExpandOptions, expand, widened
 from atlas.steps.retrieve import Hit
 from atlas.walk import Adjacency
 
@@ -47,6 +55,8 @@ def graph_expand_sql(state: State, options: GraphExpandOptions) -> State:
             "in the process instead."
         )
     hits: tuple[Hit, ...] = state["hits"]
+    schema = state.get("schema")
+    options = widened(options, schema) if schema is not None else options
     roots = tuple(dict.fromkeys(hit.node.id for hit in hits))
     reached = reach(roots, depth=options.depth, limit=options.limit)
     ids = tuple(reached.distances)

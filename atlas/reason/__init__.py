@@ -41,6 +41,7 @@ _BY_STEP: dict[str, str | tuple[str, str]] = {
     "graph_expand_sql": "ql",
     "execute_plan": "ql",
     "compile_units": "el",
+    "promote": "el",
 }
 """The steps that run an engine: either always the same one, or the one named by an option
 (with its default)."""

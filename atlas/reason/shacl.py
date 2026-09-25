@@ -182,10 +182,10 @@ def validate(
         data, shacl_graph=shape_graph, ont_graph=ontology_graph(schema),
         inference="none", advanced=True, allow_warnings=True, meta_shacl=False,
     )
-    return Report(conforms=bool(conforms), violations=_violations(results, data))
+    return Report(conforms=bool(conforms), violations=_violations(results, data, shape_graph))
 
 
-def _violations(results: Graph, data: Graph) -> tuple[Violation, ...]:
+def _violations(results: Graph, data: Graph, shapes: Graph) -> tuple[Violation, ...]:
     found: list[Violation] = []
     for result in results.subjects(RDF.type, SH.ValidationResult):
         focus = results.value(result, SH.focusNode)
@@ -193,14 +193,32 @@ def _violations(results: Graph, data: Graph) -> tuple[Violation, ...]:
         message = results.value(result, SH.resultMessage)
         severity = results.value(result, SH.resultSeverity)
         shape = results.value(result, SH.sourceShape)
-        target = _target(focus, data)
-        found.append(Violation(
-            focus=str(focus), target=target, message=str(message or ""),
-            severity=SEVERITIES.get(str(severity), "violation"),
-            path=str(path) if isinstance(path, URIRef) else "",
-            shape=str(shape) if isinstance(shape, URIRef) else "",
-        ))
+        for target in _targets(focus, shape, data, shapes):
+            found.append(Violation(
+                focus=str(focus), target=target, message=str(message or ""),
+                severity=SEVERITIES.get(str(severity), "violation"),
+                path=str(path) if isinstance(path, URIRef) else "",
+                shape=str(shape) if isinstance(shape, URIRef) else "",
+            ))
     return tuple(sorted(found, key=lambda one: (one.target or "", one.message)))
+
+
+def _targets(focus: object, shape: object, data: Graph, shapes: Graph) -> list[str | None]:
+    """What a finding refuses: the relation, for a domain or range check; else the focus.
+
+    A domain check fails on the node at one end of a relation, but what is wrong is the
+    relation -- the node may be exactly what it says it is. So a finding from a shape that
+    targets the subjects or objects of a relation refuses each such relation touching the
+    node, and leaves the node alone.
+    """
+    for end, target in ((RDF.subject, SH.targetSubjectsOf), (RDF.object, SH.targetObjectsOf)):
+        prop = shapes.value(shape, target) if isinstance(shape, URIRef) else None
+        if prop is not None and isinstance(focus, URIRef):
+            links = [abox.identity(str(one)) for one in data.subjects(end, focus)
+                     if (one, RDF.predicate, prop) in data]
+            if links:
+                return list(links)
+    return [_target(focus, data)]
 
 
 def _target(focus: object, data: Graph) -> str | None:

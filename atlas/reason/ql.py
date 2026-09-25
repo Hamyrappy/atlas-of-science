@@ -462,6 +462,44 @@ def to_sql(query: Query) -> tuple[str, list[str]]:
             [*constants, *params])
 
 
+def relations(axioms: Iterable[Axiom], names: Iterable[str]) -> tuple[str, ...]:
+    """Every relation a query for these relations is rewritten into, the named ones first.
+
+    The single-atom case of the rewriting: `bears_on(?x, ?y)` is also asked as
+    `supports(?x, ?y)` and `disputes(?x, ?y)`, and `part_of(?x, ?y)` as `has_part(?y, ?x)`.
+    A walk crosses a link in both directions anyway, so what a walk needs from this is only
+    the names -- which is what makes "follow bears_on" follow the support and the dispute,
+    and "opposes: [disputes]" pull in every relation the ontology makes a kind of dispute.
+    """
+    wanted = tuple(dict.fromkeys(names))
+    if not wanted:
+        return ()
+    t = tbox(axioms)
+    found = list(wanted)
+    for name in wanted:
+        for predicate, _ in directed(t, name):
+            if predicate not in found:
+                found.append(predicate)
+    return tuple(found)
+
+
+def directed(t: TBox, name: str) -> tuple[tuple[str, bool], ...]:
+    """The stored relations `name(?x, ?y)` is rewritten into, each with whether it runs backwards.
+
+    `(has_part, True)` in the answer for `part_of` says that `has_part(?y, ?x)` is also an
+    answer to `part_of(?x, ?y)`. A step that crosses a relation in one direction needs the
+    direction, which `relations` drops.
+    """
+    found = [(name, False)]
+    for one in rewrite(Query(head=("?x", "?y"), atoms=(Atom(name, ("?x", "?y")),)), t):
+        if len(one.atoms) != 1 or one.atoms[0].args not in (("?x", "?y"), ("?y", "?x")):
+            continue
+        key = (one.atoms[0].predicate, one.atoms[0].args == ("?y", "?x"))
+        if key not in found:
+            found.append(key)
+    return tuple(found)
+
+
 def violations(t: TBox) -> tuple[tuple[Query, str], ...]:
     """A query for each negative inclusion: its answers are what breaks it."""
     found: list[tuple[Query, str]] = []
@@ -475,5 +513,5 @@ def violations(t: TBox) -> tuple[tuple[Query, str], ...]:
     return tuple(found)
 
 
-__all__ = ["Answer", "Atom", "Query", "TBox", "evaluate", "is_variable", "parse", "rewrite",
-           "tbox", "to_sql", "violations"]
+__all__ = ["Answer", "Atom", "Query", "TBox", "directed", "evaluate", "is_variable", "parse",
+           "relations", "rewrite", "tbox", "to_sql", "violations"]

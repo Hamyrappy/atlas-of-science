@@ -30,6 +30,7 @@ from pydantic import Field
 
 from atlas.model import Frozen, Node, Schema
 from atlas.steps import State, register
+from atlas.steps.entail import implied, widen
 from atlas.steps.induce import similarity
 from atlas.walk import Adjacency
 
@@ -79,7 +80,7 @@ def align(state: State, options: AlignOptions) -> State:
     nodes = store.nodes()
     planned = _steps(nodes, options.plan, schema, options.order_field)
     actual = _steps(nodes, options.run, schema, options.order_field)
-    believed = _believed(Adjacency.of(store.links(), options.asserted))
+    believed = _believed(Adjacency.of(implied(state), widen(state, options.asserted)))
     matched, found = _match(planned, actual, believed, options.threshold)
     return {"alignment": matched, "discrepancies": found}
 

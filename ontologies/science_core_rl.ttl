@@ -18,7 +18,11 @@
 #   answered for results nobody linked to the data directly;
 # * the defined classes get their sufficient conditions. Only sufficient ones: "a line
 #   that supports some proposition is a SupportingLine" is RL, "every SupportingLine
-#   supports some proposition" would need an individual nobody mentioned and is not.
+#   supports some proposition" would need an individual nobody mentioned and is not;
+# * same_as says two records are of one individual -- one study that two registries
+#   published under two ids. A configuration that names it under `entail: {identity:
+#   [same_as]}` gives it the meaning of owl:sameAs, so every fact about one becomes a fact
+#   about the other, each with the derivation that says why (`eq-rep-s`, `eq-rep-o`).
 
 @prefix core:  <https://w3id.org/atlas-of-science/core#> .
 @prefix atlas: <https://w3id.org/atlas-of-science/substrate#> .
@@ -27,6 +31,7 @@
 @prefix obo:   <http://purl.obolibrary.org/obo/> .
 @prefix evi:   <https://w3id.org/EVI#> .
 @prefix sepio: <https://w3id.org/sepio-framework/sepio-linkml/> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
 
 <https://w3id.org/atlas-of-science/science_core_rl>
     a owl:Ontology ;
@@ -43,6 +48,11 @@ core:comparableWith a owl:SymmetricProperty .
 core:dependsOn a owl:TransitiveProperty .
 core:directlyDependsOn a owl:AsymmetricProperty .
 core:supports owl:propertyDisjointWith core:disputes .
+
+core:sameIndividualAs a owl:ObjectProperty, owl:SymmetricProperty, owl:TransitiveProperty ;
+    atlas:name "same_as" ;
+    skos:definition "The two records are of one individual: one study, one dataset, recorded twice - by two registries, or by two extractions of two versions of a paper." ;
+    skos:closeMatch owl:sameAs .
 
 core:computedFromData owl:propertyChainAxiom ( core:derivedFrom core:usedDataset ) ,
                                              ( core:derivedFrom core:dependsOn core:usedDataset ) .

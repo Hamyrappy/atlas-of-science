@@ -35,7 +35,7 @@ from collections.abc import Iterable, Mapping
 
 from pydantic import Field
 
-from atlas.model import Frozen, Link, Node
+from atlas.model import Frozen, Link, Node, Schema
 from atlas.steps import State, register
 from atlas.steps.retrieve import Hit
 from atlas.store import Store
@@ -115,6 +115,7 @@ def graph_expand(state: State, options: GraphExpandOptions) -> State:
         reasons={hit.node.id: f"ranked {hit.score:.3f}" for hit in hits},
         snapshot=_snapshot(state),
         method="graph_expand",
+        schema=state.get("schema"),
     )
     return {"bundle": bundle}
 
@@ -128,6 +129,7 @@ def expand(
     snapshot: str = "",
     method: str = "",
     adjacency: Adjacency | None = None,
+    schema: Schema | None = None,
 ) -> Bundle:
     """Build a package around some nodes: the shared body of every architecture's retrieval.
 
@@ -140,7 +142,14 @@ def expand(
     handing over every link it holds. The caller has then already decided which part of
     the graph is in play; everything after that is the same, which is what keeps one
     package contract across architectures that fetch their graphs very differently.
+
+    `schema`, when given, widens every relation the options name to the relations the
+    ontology makes kinds of it (`atlas.reason.ql.relations`): following `bears_on` follows
+    `supports` and `disputes`, and an objection named `disputes` is pulled in under every
+    relation that is a sub-relation of it. Without a schema the names are taken as written.
     """
+    if schema is not None:
+        options = widened(options, schema)
     roots = tuple(dict.fromkeys(roots))
     adjacency = Adjacency.of(store.links(), options.follow) if adjacency is None else adjacency
     reached = reach(adjacency, roots, depth=options.depth, limit=options.limit)
@@ -179,6 +188,18 @@ def expand(
         method=method,
         partial=reached.partial,
     )
+
+
+def widened(options: GraphExpandOptions, schema: Schema) -> GraphExpandOptions:
+    """The options with every named relation widened to what the ontology makes kinds of it."""
+    from atlas.reason.ql import relations
+
+    axioms = schema.every_axiom()
+    return options.model_copy(update={
+        "follow": relations(axioms, options.follow),
+        "supports": relations(axioms, options.supports),
+        "opposes": relations(axioms, options.opposes),
+    })
 
 
 def _snapshot(state: State) -> str:

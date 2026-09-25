@@ -41,9 +41,16 @@ variant:
     a19: >-
       The router picks a family of computation; path pruning optimises the set of paths
       inside one family.
+  reasoning: >-
+    OWL 2 RL over the data before the walk, so every route seeds the same closed
+    graph: a proposition some line disputes is a ContestedProposition whichever route
+    reached it, a transitive part-of is followed however it was asserted, and the answer
+    is told which of it was inferred.
   spec: docs/architectures/07-routed-graphrag.md
 
-schema: [science_core, scierc]
+schema:
+  ontologies: [science_core_rl, scierc_rl]
+  profile: RL
 
 steps:
   - ingest_pdf
@@ -66,6 +73,7 @@ ask:
         connections: [compare, between, similar, related to]
   - {communities: {min_size: 2}}
   - {retrieve_routed: {overview: overview, communities: 2, cap: 300}}
-  - {graph_expand: {depth: 3, limit: 80, supports: [supports], opposes: [disputes]}}
+  - entail
+  - {graph_expand_entailed: {depth: 3, limit: 80, supports: [supports], opposes: [disputes]}}
   - graph_answer
   - check_answer

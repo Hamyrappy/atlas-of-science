@@ -36,6 +36,7 @@ from pydantic import Field
 
 from atlas.model import Frozen, Node
 from atlas.steps import State, register
+from atlas.steps.entail import implied, widen
 from atlas.steps.graph_expand import Bundle
 from atlas.text import normalise
 from atlas.walk import Adjacency
@@ -77,7 +78,8 @@ def reconcile(state: State, options: ReconcileOptions) -> State:
     """Pair up the opposed positions of the package and say what is true about each pair."""
     bundle: Bundle = state["bundle"]
     store = state["store"]
-    adjacency = Adjacency.of(store.links())
+    adjacency = Adjacency.of(implied(state))
+    options = options.model_copy(update={"conditions": widen(state, options.conditions)})
     held = {node.id: node for node in store.nodes()}
     for node in bundle.nodes:
         held.setdefault(node.id, node)
