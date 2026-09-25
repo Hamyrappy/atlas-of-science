@@ -54,7 +54,18 @@ from atlas.model.owl import (
     SubPropertyOf,
 )
 from atlas.model.schema import FieldDef, PredicateDef, Schema, TypeDef
-from atlas.ontology.vocabulary import ATLAS, DATATYPES, LOCAL, MATCHES, OWL, RDF, RDFS, SKOS, XSD
+from atlas.ontology.vocabulary import (
+    ATLAS,
+    DATATYPES,
+    LOCAL,
+    MATCHES,
+    OWL,
+    RDF,
+    RDFS,
+    SKOS,
+    XSD,
+    local_field,
+)
 
 CHARACTERISTIC_TYPES = {
     OWL.TransitiveProperty: "transitive", OWL.SymmetricProperty: "symmetric",
@@ -545,7 +556,8 @@ def to_graph(schema: Schema) -> Graph:
             g.add((subject, SKOS.definition, Literal(type_def.description)))
         listed = []
         for one in type_def.fields:
-            prop = fields.setdefault(one.name, URIRef(one.iri or f"{LOCAL}field:{one.name}"))
+            prop = URIRef(one.iri or local_field(one.name, one.datatype))
+            fields.setdefault(one.name, prop)
             g.add((prop, RDF.type, OWL.DatatypeProperty))
             g.add((prop, ATLAS.name, Literal(one.name)))
             g.add((prop, ATLAS.datatype, Literal(one.datatype)))

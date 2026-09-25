@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 from atlas.model import Node, Span
-from atlas.ontology import builtin, load, load_text, resolve
+from atlas.ontology import builtin, load, load_text, resolve, to_turtle
 
 ONTOLOGY = Path(__file__).parents[1] / "ontologies" / "ml_paper.ttl"
 NAMESPACE = "https://example.org/ontology/ml-paper#"
@@ -277,10 +277,35 @@ def test_the_vocabulary_reads_in_the_order_the_file_declares_it() -> None:
 
 def test_a_schema_written_as_turtle_reads_back_to_the_same_axioms() -> None:
     """The writer is the reader run backwards: nothing an engine reasons with is lost."""
-    from atlas.ontology import to_turtle
 
     for name in ("science_core_dl", "science_map_rl", "scierc_rl"):
         schema = load(name)
         again = load_text(to_turtle(schema))
         assert set(again.every_axiom()) == set(schema.every_axiom()), name
         assert again.type_names() == schema.type_names()
+
+
+def test_a_class_that_narrows_an_inherited_fields_datatype_keeps_it() -> None:
+    """A field redeclared with another datatype is another property under the same name.
+
+    Local field IRIs were keyed by name alone, so the child's `date` and the parent's
+    `string` were one property with two datatypes and the loader kept either. The nearest
+    declaration wins, as it always did in a pack, and the parent's other fields stay.
+    """
+    schema = load_text("""
+types:
+  - name: Attribute
+    fields: [value, note]
+  - name: Period
+    parent: Attribute
+    fields:
+      - name: value
+        datatype: date
+""")
+
+    declared = {one.name: one.datatype for one in schema.declared_fields("Period")}
+    assert declared == {"value": "date", "note": "string"}
+    assert {one.name: one.datatype for one in schema.declared_fields("Attribute")} == {
+        "value": "string", "note": "string"}
+    again = load_text(to_turtle(schema))
+    assert {one.name: one.datatype for one in again.declared_fields("Period")} == declared

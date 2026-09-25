@@ -30,7 +30,7 @@ from rdflib import BNode, Graph, Literal, URIRef
 from rdflib.collection import Collection
 
 from atlas.model import FieldDef, PredicateDef, Schema, TypeDef
-from atlas.ontology.vocabulary import ATLAS, LOCAL, OWL, RDF, RDFS, SKOS
+from atlas.ontology.vocabulary import ATLAS, LOCAL, OWL, RDF, RDFS, SKOS, local_field
 
 KEYS = ("prefixes", "types", "predicates")
 """What a pack's loader reads. Anything else in the file -- a consumer's own extension --
@@ -115,7 +115,7 @@ def _type(graph: Graph, type_def: TypeDef, pack: Pack, types: dict[str, str]) ->
         graph.add((subject, SKOS.definition, Literal(type_def.description)))
     listed = []
     for one in type_def.fields:
-        prop = URIRef(one.iri or f"{LOCAL}field:{one.name}")
+        prop = URIRef(one.iri or local_field(one.name, one.datatype))
         graph.add((prop, RDF.type, OWL.DatatypeProperty))
         graph.add((prop, ATLAS.name, Literal(one.name)))
         graph.add((prop, ATLAS.datatype, Literal(one.datatype)))
@@ -126,8 +126,8 @@ def _type(graph: Graph, type_def: TypeDef, pack: Pack, types: dict[str, str]) ->
         graph.add((subject, ATLAS.fields, head))
     if type_def.label_field:
         target = next((f for f in type_def.fields if f.name == type_def.label_field), None)
-        prop = URIRef(target.iri or f"{LOCAL}field:{target.name}") if target else Literal(
-            type_def.label_field)
+        prop = (URIRef(target.iri or local_field(target.name, target.datatype)) if target
+                else Literal(type_def.label_field))
         graph.add((subject, ATLAS.labelField, prop))
     if type_def.mappings:
         head = BNode()

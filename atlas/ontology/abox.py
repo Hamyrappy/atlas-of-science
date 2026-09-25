@@ -27,7 +27,7 @@ from collections.abc import Iterable
 from rdflib import BNode, Graph, Literal, URIRef
 
 from atlas.model import Link, Node, Schema, Span
-from atlas.ontology.vocabulary import ATLAS, LOCAL, OA, RDF, XSD
+from atlas.ontology.vocabulary import ATLAS, LOCAL, OA, RDF, XSD, local_field
 
 NODE = "urn:atlas:node:"
 LINK = "urn:atlas:link:"
@@ -65,7 +65,7 @@ def field_iri(schema: Schema, type_name: str, field: str) -> URIRef:
     declared = next((one for one in schema.declared_fields(type_name) if one.name == field), None)
     if declared is not None and declared.iri:
         return URIRef(declared.iri)
-    return URIRef(f"{LOCAL}field:{field}")
+    return URIRef(local_field(field, declared.datatype if declared is not None else "string"))
 
 
 def to_graph(

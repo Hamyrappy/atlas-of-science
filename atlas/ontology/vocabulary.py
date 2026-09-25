@@ -56,7 +56,19 @@ PROFILES = ("RDFS", "EL", "QL", "RL", "DL")
 """The profiles an ontology or a configuration may name: RDFS entailment, the three OWL 2
 tractable profiles, and OWL 2 DL."""
 
+def local_field(name: str, datatype: str = "string") -> str:
+    """The IRI of a field that has none of its own: one per name and datatype.
+
+    A datatype property has one range, so a field one class records as a date and another
+    as a string are two properties under one name -- one slot of a node, since fields are
+    keyed by name, and two ranges. Keying the local IRI by name alone made the second
+    declaration overwrite the first, and a class that narrowed an inherited field's
+    datatype lost it.
+    """
+    return f"{LOCAL}field:{name}" if datatype == "string" else f"{LOCAL}field:{name}:{datatype}"
+
+
 __all__ = [
     "ATLAS", "DATATYPES", "DCTERMS", "HOME", "LOCAL", "MATCHES", "OA", "OWL", "PROFILES", "PROV",
-    "RDF", "RDFS", "SH", "SKOS", "XSD",
+    "RDF", "RDFS", "SH", "SKOS", "XSD", "local_field",
 ]

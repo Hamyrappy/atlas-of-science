@@ -64,8 +64,12 @@ the ontology. `skos:closeMatch` and the other SKOS mapping properties are what a
 elsewhere; no engine treats them as equivalence, which is the point of SKOS.
 
 The fields every ontology uses are declared once, in `ontologies/fields.ttl`, and imported: a
-field is a slot of a node, a node's fields are keyed by name, and two IRIs for `name` would be two
-slots.
+field is a slot of a node and a node's fields are keyed by name, so two IRIs for `name` would be
+one slot with two identities, and an export could not say which it was. The one case for a second
+property under a name is a second datatype — a datatype property has one range — and a legacy pack
+whose class narrows an inherited field to a date gets that property without asking: its local IRI
+is keyed by name and datatype (`atlas.ontology.vocabulary.local_field`), and the nearest
+declaration wins, as it always did.
 
 ## How an ontology is loaded
 
