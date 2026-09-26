@@ -203,3 +203,18 @@ def test_a_condition_the_ontology_carries_to_a_result_is_compared_on() -> None:
     assert {one.predicate for one in state["derived"]} >= {"obtained_under"}
     assert [one.verdict for one in result["comparisons"]] == ["comparable"]
     assert result["comparisons"][0].matched == ("name", "unit")
+
+
+def test_a_results_own_wording_is_not_a_condition_when_the_ontology_says_so(
+    science: Fixture,
+) -> None:
+    """Two results that say different things are not results obtained under different
+    conditions; with `own` off, only what the result reaches is compared."""
+    own = CompareOptions(type="StudyResult", conditions=("observed_under",),
+                         fields=("statement",))
+    [by_wording] = compare(state(science), own)["comparisons"]
+    assert "statement" in by_wording.differed
+
+    reached = own.model_copy(update={"own": False})
+    [by_conditions] = compare(state(science), reached)["comparisons"]
+    assert "statement" not in by_conditions.differed

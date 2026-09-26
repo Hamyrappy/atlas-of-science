@@ -240,7 +240,7 @@ itself prints when an option is wrong -- anything not on this line is refused as
 | `check_answer` | no options |
 | `classify` | engine: Literal['el', 'dl'] = 'el', pairwise_limit: int = 60, strict: bool = False |
 | `communities` | follow: tuple[str, ...] = (), min_size: int = 2, rounds: int = 8, members_in_report: int = 5 |
-| `compare` | type: str, conditions: tuple[str, ...] = (), fields: tuple[str, ...] = ('conditions',), value_field: str = 'value', unit_field: str = 'unit', comparable: tuple[str, ...] = (), units: dict[str, float] = {} |
+| `compare` | type: str, conditions: tuple[str, ...] = (), fields: tuple[str, ...] = ('conditions',), own: bool = True, value_field: str = 'value', unit_field: str = 'unit', comparable: tuple[str, ...] = (), units: dict[str, float] = {} |
 | `compile_units` | type: str = 'SemanticUnit', kinds: tuple[str, ...] = (), quantifiers: tuple[str, ...] = (), modalities: tuple[str, ...] = (), polarities: tuple[str, ...] = (), kind_field: str = 'kind', quantifier_field: str = 'quantifier', polarity_field: str = 'polarity', modality_field: str = 'modality', scope_field: str = 'scope', expression_field: str = 'expression', subject_field: str = 'subject_term', object_field: str = 'object_term', readings: dict[str, Literal['all', 'some', 'none']] = {}, negative: tuple[str, ...] = (), reason: bool = True, explain_limit: int = 200 |
 | `count_independence` | no options |
 | `critique` | negations: tuple[str, ...] = (), min_quote: int = 12, grounded_fields: tuple[str, ...] = () |
@@ -266,7 +266,7 @@ itself prints when an option is wrong -- anything not on this line is refused as
 | `mark_units` | no options |
 | `promote` | min_support: int = 3, min_rounds: int = 2, reuse: float = 0.75, require_definition: bool = True, parent: str = '', out: str = 'proposal.ttl' |
 | `query` | query: str, sql: bool = True, consistency: bool = False, limit: int = 200, expand: GraphExpandOptions = GraphExpandOptions(depth=2, limit=60, follow=(), supports=(), opposes=()) |
-| `reconcile` | supports: tuple[str, ...], opposes: tuple[str, ...], conditions: tuple[str, ...] = (), fields: tuple[str, ...] = ('conditions',) |
+| `reconcile` | supports: tuple[str, ...], opposes: tuple[str, ...], conditions: tuple[str, ...] = (), fields: tuple[str, ...] = ('conditions',), own: bool = True |
 | `relate` | no options |
 | `relate_llm` | segment: str = 'segment' |
 | `relocate` | no options |

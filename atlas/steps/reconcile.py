@@ -36,6 +36,7 @@ from pydantic import Field
 
 from atlas.model import Frozen, Node
 from atlas.steps import State, register
+from atlas.steps.compare import OWN
 from atlas.steps.entail import implied, widen
 from atlas.steps.graph_expand import Bundle
 from atlas.text import normalise
@@ -70,6 +71,7 @@ class ReconcileOptions(Frozen):
     opposes: tuple[str, ...] = Field(min_length=1)
     conditions: tuple[str, ...] = Field(default=(), description="Relations reaching conditions")
     fields: tuple[str, ...] = Field(default=("conditions",))
+    own: bool = Field(True, description=OWN)
 
 
 @register("reconcile", requires=("bundle", "store"), produces=("conflicts", "disagreements"),
@@ -169,7 +171,10 @@ def _conditions(
     node: Node, held: Mapping[str, Node], adjacency: Adjacency, options: ReconcileOptions
 ) -> dict[str, str]:
     """A position's conditions: its own fields, plus those of everything it reaches."""
-    found = {field: normalise(node.fields.get(field, "")) for field in options.fields}
+    found = {
+        field: normalise(node.fields.get(field, "")) if options.own else ""
+        for field in options.fields
+    }
     frontier = [node.id]
     seen = {node.id}
     for _hop in range(2):

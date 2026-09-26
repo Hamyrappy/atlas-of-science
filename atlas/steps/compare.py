@@ -39,6 +39,13 @@ from atlas.steps.graph_expand import Bundle
 from atlas.text import normalise
 from atlas.walk import Adjacency
 
+OWN = (
+    "Whether a result's own fields count among its conditions. Off for an ontology in which "
+    "every class states itself in one shared field -- a formulation, a statement -- where a "
+    "result's own wording is not a condition of it, and reading it as one compares two "
+    "results by what they say rather than by what they were obtained under."
+)
+
 Verdict = Literal["comparable", "partial", "insufficient"]
 """What may be said about two results side by side: everything matched, some of it did,
 or something needed was never recorded."""
@@ -82,6 +89,7 @@ class CompareOptions(Frozen):
     type: str = Field(min_length=1, description="The ontology type whose instances are compared")
     conditions: tuple[str, ...] = Field(default=(), description="Relations leading to conditions")
     fields: tuple[str, ...] = Field(default=("conditions",))
+    own: bool = Field(True, description=OWN)
     value_field: str = "value"
     unit_field: str = "unit"
     comparable: tuple[str, ...] = Field(
@@ -208,7 +216,8 @@ def _conditions(
 ) -> dict[str, str]:
     """Every condition of one result: its own fields, plus those of what it points at."""
     found = {
-        field: normalise(node.fields.get(field, "")) for field in options.fields
+        field: normalise(node.fields.get(field, "")) if options.own else ""
+        for field in options.fields
     }
     for edge in adjacency.edges(node.id, backward=False):
         if options.conditions and edge.predicate not in options.conditions:
