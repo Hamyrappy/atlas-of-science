@@ -71,6 +71,13 @@ whose class narrows an inherited field to a date gets that property without aski
 is keyed by name and datatype (`atlas.ontology.vocabulary.local_field`), and the nearest
 declaration wins, as it always did.
 
+A term with no IRI of its own — a class, a relation or a field of a legacy pack that declares no
+prefixes — is given one under `urn:atlas:local:` (`vocabulary.local`). The name goes into it as
+written, in whatever script, except for what an IRI cannot hold: a space, `<`, `>`, `"`, `{`, `}`,
+`|`, `\`, `^`, a backtick and `%` are percent-encoded (`vocabulary.escape`), so `Measuring device`
+is `urn:atlas:local:Measuring%20device`, the ontology still serialises, and the name read back is
+the name put in. The shapes SHACL generates are named the same way.
+
 ## How an ontology is loaded
 
 `load(*specs, base=None, profile="", shapes=())` does five things, in order.

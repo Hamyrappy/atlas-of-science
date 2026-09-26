@@ -56,6 +56,26 @@ PROFILES = ("RDFS", "EL", "QL", "RL", "DL")
 """The profiles an ontology or a configuration may name: RDFS entailment, the three OWL 2
 tractable profiles, and OWL 2 DL."""
 
+UNSAFE = '<>" {}|\\^`%'
+"""What may not stand in an IRI as it is written: rdflib refuses to serialise the first
+nine, and `%` is escaped too so that a name read back out of an IRI is the name put in."""
+
+
+def escape(name: str) -> str:
+    """A term's name as it may stand in an IRI: unchanged but for what an IRI cannot hold.
+
+    A vocabulary names its terms in its own words -- with a space, in Cyrillic -- and a name
+    pasted into an IRI as it is makes one no serialiser will write. Only what an IRI cannot
+    hold is percent-encoded, so a name in another script stays readable in the IRI.
+    """
+    return "".join(f"%{ord(char):02X}" if char in UNSAFE else char for char in name)
+
+
+def local(name: str) -> str:
+    """The IRI of a term that has none of its own."""
+    return f"{LOCAL}{escape(name)}"
+
+
 def local_field(name: str, datatype: str = "string") -> str:
     """The IRI of a field that has none of its own: one per name and datatype.
 
@@ -65,10 +85,11 @@ def local_field(name: str, datatype: str = "string") -> str:
     declaration overwrite the first, and a class that narrowed an inherited field's
     datatype lost it.
     """
-    return f"{LOCAL}field:{name}" if datatype == "string" else f"{LOCAL}field:{name}:{datatype}"
+    field = escape(name)
+    return f"{LOCAL}field:{field}" if datatype == "string" else f"{LOCAL}field:{field}:{datatype}"
 
 
 __all__ = [
     "ATLAS", "DATATYPES", "DCTERMS", "HOME", "LOCAL", "MATCHES", "OA", "OWL", "PROFILES", "PROV",
-    "RDF", "RDFS", "SH", "SKOS", "XSD", "local_field",
+    "RDF", "RDFS", "SH", "SKOS", "UNSAFE", "XSD", "escape", "local", "local_field",
 ]

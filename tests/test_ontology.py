@@ -309,3 +309,23 @@ types:
         "value": "string", "note": "string"}
     again = load_text(to_turtle(schema))
     assert {one.name: one.datatype for one in again.declared_fields("Period")} == declared
+
+
+def test_a_term_named_with_a_space_and_no_iri_is_written_and_read_back_by_its_name() -> None:
+    schema = load_text("""
+types:
+  - name: Measuring device
+    fields: [serial number]
+    description: A class with a space in its name and no identity of its own.
+predicates:
+  - name: calibrated against
+    domain: Measuring device
+    range: Measuring device
+    description: A relation with a space in its name.
+""")
+
+    again = load_text(to_turtle(schema))
+
+    assert [one.name for one in again.types] == ["Measuring device"]
+    assert [one.name for one in again.predicates] == ["calibrated against"]
+    assert [one.name for one in again.declared_fields("Measuring device")] == ["serial number"]

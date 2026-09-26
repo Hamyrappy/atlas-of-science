@@ -30,7 +30,7 @@ from rdflib import BNode, Graph, Literal, URIRef
 from rdflib.collection import Collection
 
 from atlas.model import FieldDef, PredicateDef, Schema, TypeDef
-from atlas.ontology.vocabulary import ATLAS, LOCAL, OWL, RDF, RDFS, SKOS, local_field
+from atlas.ontology.vocabulary import ATLAS, OWL, RDF, RDFS, SKOS, local, local_field
 
 KEYS = ("prefixes", "types", "predicates")
 """What a pack's loader reads. Anything else in the file -- a consumer's own extension --
@@ -61,11 +61,11 @@ def read(raw: bytes, path: Path) -> Pack:
         fields = tuple(_field(one, scope) for one in entry.get("fields") or ())
         type_def = TypeDef(**{**entry, "iri": _iri(entry, scope, path), "fields": fields})
         pack.types.append(type_def)
-        pack.type_iris[type_def.name] = type_def.iri or f"{LOCAL}{type_def.name}"
+        pack.type_iris[type_def.name] = type_def.iri or local(type_def.name)
     for entry in document.get("predicates") or ():
         predicate = PredicateDef(**{**entry, "iri": _iri(entry, scope, path)})
         pack.predicates.append(predicate)
-        pack.predicate_iris[predicate.name] = predicate.iri or f"{LOCAL}{predicate.name}"
+        pack.predicate_iris[predicate.name] = predicate.iri or local(predicate.name)
     return pack
 
 
@@ -109,7 +109,7 @@ def _type(graph: Graph, type_def: TypeDef, pack: Pack, types: dict[str, str]) ->
             raise ValueError(f"type {type_def.name!r} has unknown parent {type_def.parent!r}")
         graph.add((subject, RDFS.subClassOf, URIRef(parent)))
     for other in type_def.disjoint_with:
-        target = _resolve(other, types, pack) or f"{LOCAL}{other}"
+        target = _resolve(other, types, pack) or local(other)
         graph.add((subject, OWL.disjointWith, URIRef(target)))
     if type_def.description:
         graph.add((subject, SKOS.definition, Literal(type_def.description)))
@@ -142,7 +142,7 @@ def _predicate(graph: Graph, predicate: PredicateDef, pack: Pack, types: dict[st
     graph.add((subject, ATLAS.name, Literal(predicate.name)))
     for which, term in ((RDFS.domain, predicate.domain), (RDFS.range, predicate.range)):
         if term and term != "owl:Thing":
-            target = _resolve(term, types, pack) or f"{LOCAL}{term}"
+            target = _resolve(term, types, pack) or local(term)
             graph.add((subject, which, URIRef(target)))
     kinds = {"transitive": OWL.TransitiveProperty, "symmetric": OWL.SymmetricProperty,
              "asymmetric": OWL.AsymmetricProperty, "reflexive": OWL.ReflexiveProperty,
@@ -157,10 +157,10 @@ def _predicate(graph: Graph, predicate: PredicateDef, pack: Pack, types: dict[st
             graph.add((subject, ATLAS.characteristic, Literal(named)))
     if predicate.inverse_of:
         target = (_resolve(predicate.inverse_of, predicates, pack)
-                  or f"{LOCAL}{predicate.inverse_of}")
+                  or local(predicate.inverse_of))
         graph.add((subject, OWL.inverseOf, URIRef(target)))
     for parent in predicate.parents:
-        target = _resolve(parent, predicates, pack) or f"{LOCAL}{parent}"
+        target = _resolve(parent, predicates, pack) or local(parent)
         graph.add((subject, RDFS.subPropertyOf, URIRef(target)))
     if predicate.description:
         graph.add((subject, SKOS.definition, Literal(predicate.description)))

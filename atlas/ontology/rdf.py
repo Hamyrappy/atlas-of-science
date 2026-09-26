@@ -23,6 +23,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from urllib.parse import unquote
 
 from rdflib import BNode, Graph, Literal, URIRef
 from rdflib.collection import Collection
@@ -64,6 +65,7 @@ from atlas.ontology.vocabulary import (
     RDFS,
     SKOS,
     XSD,
+    local,
     local_field,
 )
 
@@ -473,7 +475,7 @@ class Reader:
 def local_part(iri: str) -> str:
     """The last segment of an IRI, which is what a term is called when it names nothing."""
     if iri.startswith(LOCAL):
-        return iri[len(LOCAL):].rsplit(":", 1)[-1]
+        return unquote(iri[len(LOCAL):].rsplit(":", 1)[-1])
     for separator in ("#", "/", ":"):
         if separator in iri:
             tail = iri.rsplit(separator, 1)[-1]
@@ -545,8 +547,8 @@ def to_graph(schema: Schema) -> Graph:
     g.add((ontology, RDF.type, OWL.Ontology))
     if schema.profile:
         g.add((ontology, ATLAS.profile, Literal(schema.profile)))
-    classes = {t.name: URIRef(t.iri or f"{LOCAL}{t.name}") for t in schema.types}
-    properties = {p.name: URIRef(p.iri or f"{LOCAL}{p.name}") for p in schema.predicates}
+    classes = {t.name: URIRef(t.iri or local(t.name)) for t in schema.types}
+    properties = {p.name: URIRef(p.iri or local(p.name)) for p in schema.predicates}
     fields: dict[str, URIRef] = {}
     for type_def in schema.types:
         subject = classes[type_def.name]
@@ -602,10 +604,10 @@ class _Writer:
             return OWL.Thing
         if name == BOTTOM:
             return OWL.Nothing
-        return self.classes.get(name) or URIRef(f"{LOCAL}{name}")
+        return self.classes.get(name) or URIRef(local(name))
 
     def prop(self, prop: Property) -> Term:
-        iri = self.properties.get(prop.name) or URIRef(f"{LOCAL}{prop.name}")
+        iri = self.properties.get(prop.name) or URIRef(local(prop.name))
         if not prop.inverse:
             return iri
         node = BNode()
@@ -634,7 +636,7 @@ class _Writer:
         elif isinstance(expression, Only):
             g.add((node, OWL.allValuesFrom, self.expression(expression.filler)))
         elif isinstance(expression, HasValue):
-            g.add((node, OWL.hasValue, URIRef(f"{LOCAL}individual:{expression.individual}")))
+            g.add((node, OWL.hasValue, URIRef(local(f"individual:{expression.individual}"))))
         elif isinstance(expression, Cardinality):
             predicate = {"min": OWL.minQualifiedCardinality, "max": OWL.maxQualifiedCardinality,
                          "exactly": OWL.qualifiedCardinality}[expression.bound]

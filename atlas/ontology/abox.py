@@ -27,7 +27,7 @@ from collections.abc import Iterable
 from rdflib import BNode, Graph, Literal, URIRef
 
 from atlas.model import Link, Node, Schema, Span
-from atlas.ontology.vocabulary import ATLAS, LOCAL, OA, RDF, XSD, local_field
+from atlas.ontology.vocabulary import ATLAS, OA, RDF, XSD, local, local_field
 
 NODE = "urn:atlas:node:"
 LINK = "urn:atlas:link:"
@@ -53,12 +53,12 @@ def identity(iri: str) -> str | None:
 
 def class_iri(schema: Schema, name: str) -> URIRef:
     found = schema.find_type(name)
-    return URIRef(found.iri) if found is not None and found.iri else URIRef(f"{LOCAL}{name}")
+    return URIRef(found.iri) if found is not None and found.iri else URIRef(local(name))
 
 
 def property_iri(schema: Schema, name: str) -> URIRef:
     found = schema.find_predicate(name)
-    return URIRef(found.iri) if found is not None and found.iri else URIRef(f"{LOCAL}{name}")
+    return URIRef(found.iri) if found is not None and found.iri else URIRef(local(name))
 
 
 def field_iri(schema: Schema, type_name: str, field: str) -> URIRef:

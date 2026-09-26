@@ -29,7 +29,6 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from urllib.parse import quote
 
 from rdflib import BNode, Graph, Literal, URIRef
 from rdflib.collection import Collection
@@ -38,7 +37,7 @@ from atlas.model import Link, Node, Schema
 from atlas.model.owl import TOP
 from atlas.ontology import abox
 from atlas.ontology.rdf import to_graph as tbox_graph
-from atlas.ontology.vocabulary import ATLAS, RDF, RDFS, SH, XSD
+from atlas.ontology.vocabulary import ATLAS, RDF, RDFS, SH, XSD, escape
 
 SEVERITIES = {str(SH.Violation): "violation", str(SH.Warning): "warning", str(SH.Info): "info"}
 
@@ -130,13 +129,8 @@ def generated(schema: Schema, nodes: Iterable[Node] = ()) -> Graph:
 
 
 def _shape(kind: str, name: str) -> URIRef:
-    """The IRI a generated shape is named by, valid whatever the class or relation is called.
-
-    A vocabulary names its terms in its own language and its own spelling -- with a space,
-    in Cyrillic -- and a name pasted into an IRI as it is makes one no serialiser will
-    write. The name is percent-encoded, so the shape is still found by it.
-    """
-    return URIRef(f"urn:atlas:shape:{kind}:{quote(name, safe='')}")
+    """The IRI a generated shape is named by, valid whatever the class or relation is called."""
+    return URIRef(f"urn:atlas:shape:{kind}:{escape(name)}")
 
 
 def _property(g: Graph, shape: URIRef, path: URIRef, *, minimum: int | None = None,

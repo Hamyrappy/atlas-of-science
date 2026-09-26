@@ -54,7 +54,7 @@ from rdflib import BNode, Graph, Literal, URIRef
 from rdflib.collection import Collection
 
 from atlas.model import Frozen, Schema, Source
-from atlas.ontology.vocabulary import ATLAS, HOME, LOCAL, OWL, RDF, RDFS, SKOS
+from atlas.ontology.vocabulary import ATLAS, HOME, LOCAL, OWL, RDF, RDFS, SKOS, local
 from atlas.steps import State, register
 from atlas.text import normalise, tokenise
 
@@ -192,7 +192,7 @@ def module(candidates: Iterable[Candidate], schema: Schema, parent: str = "") ->
         g.add((iri, RDF.type, OWL.Class))
         g.add((iri, ATLAS.name, Literal(candidate.label)))
         if above is not None:
-            g.add((iri, RDFS.subClassOf, URIRef(above.iri or f"{LOCAL}{above.name}")))
+            g.add((iri, RDFS.subClassOf, URIRef(above.iri or local(above.name))))
         g.add((iri, SKOS.definition, Literal(
             candidate.definition or f"Proposed from {candidate.support} sources.")))
         g.add((iri, SKOS.editorialNote, Literal(_note(candidate))))
