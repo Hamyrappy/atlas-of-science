@@ -29,6 +29,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from urllib.parse import quote
 
 from rdflib import BNode, Graph, Literal, URIRef
 from rdflib.collection import Collection
@@ -95,7 +96,7 @@ def generated(schema: Schema, nodes: Iterable[Node] = ()) -> Graph:
         members = by_type.get(type_def.name, ())
         if not members:
             continue
-        shape = URIRef(f"urn:atlas:shape:fields:{type_def.name}")
+        shape = _shape("fields", type_def.name)
         g.add((shape, RDF.type, SH.NodeShape))
         for member in members:
             g.add((shape, SH.targetNode, abox.node_iri(member)))
@@ -118,7 +119,7 @@ def generated(schema: Schema, nodes: Iterable[Node] = ()) -> Graph:
             expected = getattr(predicate, end)
             if not expected or expected == TOP or schema.find_type(expected) is None:
                 continue
-            shape = URIRef(f"urn:atlas:shape:{end}:{predicate.name}")
+            shape = _shape(end, predicate.name)
             g.add((shape, RDF.type, SH.NodeShape))
             g.add((shape, target, prop))
             g.add((shape, SH["class"], abox.class_iri(schema, expected)))
@@ -126,6 +127,16 @@ def generated(schema: Schema, nodes: Iterable[Node] = ()) -> Graph:
                 f"the {'subject' if end == 'domain' else 'object'} of {predicate.name} "
                 f"is not recorded as a {expected}")))
     return g
+
+
+def _shape(kind: str, name: str) -> URIRef:
+    """The IRI a generated shape is named by, valid whatever the class or relation is called.
+
+    A vocabulary names its terms in its own language and its own spelling -- with a space,
+    in Cyrillic -- and a name pasted into an IRI as it is makes one no serialiser will
+    write. The name is percent-encoded, so the shape is still found by it.
+    """
+    return URIRef(f"urn:atlas:shape:{kind}:{quote(name, safe='')}")
 
 
 def _property(g: Graph, shape: URIRef, path: URIRef, *, minimum: int | None = None,

@@ -75,3 +75,20 @@ def test_a_statement_on_two_propositions_is_refused() -> None:
              node("p2", "Proposition", expression="b")]
     links = [link("a", "states", "st", "p1"), link("b", "states", "st", "p2")]
     assert refused(nodes, links) == {"st"}
+
+
+def test_a_shape_is_named_by_a_valid_iri_whatever_its_class_is_called() -> None:
+    from atlas.ontology import load_text
+    from atlas.reason.shacl import generated
+
+    schema = load_text("""
+types:
+  - name: Study result
+    fields: [value]
+    description: A class whose name has a space in it.
+""")
+    shapes = generated(schema, [node("n1", "Study result", value="0.94")])
+
+    named = {str(shape) for shape in shapes.subjects() if "fields" in str(shape)}
+    assert named == {"urn:atlas:shape:fields:Study%20result"}
+    assert shapes.serialize(format="nt")
