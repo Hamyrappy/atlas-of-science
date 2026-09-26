@@ -30,15 +30,17 @@ The model is asked for a verbatim quote and never for character offsets, which i
 
 `Source` was read; `Span` is a verbatim region of it; `Node` is a typed thing and `Link` a typed relation, both valid only under the `Schema` they name; `Assertion` says who claimed one of those, when, on what evidence and what it replaces; `Schema` is the ontology — its OWL 2 axioms (`atlas/model/owl.py`) and the vocabulary they project — loaded at run time.
 
+**The TBox is OWL 2; the ABox is a labelled property graph.** `Schema` is the TBox: classes, relations, fields and axioms, authored in Turtle under `ontologies/`, a module per profile, with SHACL shapes beside them. `Node` and `Link`, written as `Assertion`s, are the ABox: a vertex labelled with exactly one class, a directed edge labelled with one relation, both carrying fields and spans. The ABox is never stored as RDF — `atlas/ontology/abox.py` projects it to triples when SHACL or an export needs them — and never gets a second label on a node: what else a node is follows from the TBox (`Schema.is_a`, or a derived fact with its derivation). Keep the two apart: a class, a relation or an axiom goes into an ontology file; an instance goes into a store through an assertion.
+
 Nothing under `atlas/` may name a class, a field or a relation of any domain. The six classes that used to be built in live in `ontologies/ml_paper.ttl`, which is one domain's ontology and is loaded only when a configuration names it. `tests/test_substrate.py` is the standing proof: it runs the shipped steps over an invented vocabulary, and a change under `atlas/` needed to make it pass means a domain has leaked into the core.
 
 ## Layout and what belongs where
 
 ```
 atlas/model/           the metamodel: source, graph, assertion, schema, the OWL 2 model; no IO, no vocabulary
-atlas/ontology/        reading ontologies (OWL in RDF, legacy YAML packs) into one classified Schema, and writing RDF
+atlas/ontology/        the TBox: reading ontologies (OWL in RDF, legacy YAML packs) into one classified Schema, writing it back as RDF; and `abox.py`, the ABox projected to RDF on demand
 atlas/reason/          the engines: RDFS and OWL 2 RL over data, EL and the DL tableau over the ontology, QL over queries, SHACL, the profile checker
-atlas/store/           the append-only write path and the projections read back out of it
+atlas/store/           the ABox: the append-only write path and the property graph projected back out of it
 atlas/steps/           one module per replaceable step, each registered under a name
 atlas/pipeline.py      a configuration of step names run in order over one dict of state
 atlas/text.py          folding, normalising and tokenising; one ruling on what a dash is

@@ -26,7 +26,7 @@ flowchart TB
         I --> E --> R --> V --> L --> SH --> A --> X
     end
 
-    subgraph STORE["the store — a history, not a table"]
+    subgraph STORE["the ABox — a property graph, stored as a history"]
         ASSERTIONS[("assertions<br/>append-only")]
         PROJ["nodes · links<br/>= current(history)"]
         ASSERTIONS --> PROJ
@@ -40,7 +40,7 @@ flowchart TB
         RANK --> WALK --> ANS
     end
 
-    ONTO[("the ontology<br/>OWL 2 · Turtle · a module per profile<br/>+ SHACL shapes<br/>hashed into schema_version")]
+    ONTO[("the TBox — the ontology<br/>OWL 2 · Turtle · a module per profile<br/>+ SHACL shapes<br/>hashed into schema_version")]
     ENG{{"the engines<br/>RDFS · RL over the data<br/>EL · DL over the ontology<br/>QL over a query"}}
 
     SRC --> BUILD --> STORE --> ASK --> OUT(["an answer whose every<br/>claim names its quote"])
@@ -108,6 +108,12 @@ erDiagram
         string profile "RDFS · EL · QL · RL · DL"
     }
 ```
+
+`Schema` is the **TBox**: what may be said, in OWL 2. `Node` and `Link`, written as `Assertion`s,
+are the **ABox**: what was said, as a labelled property graph — a node labelled with one class, an
+edge labelled with one relation, both with their own fields and their own evidence. RDF is a
+projection of that graph, made when SHACL or an export needs triples, and never how it is stored
+(`docs/ontology.md`, *Two halves*).
 
 Not one of those boxes names a class, a field or a relation of any subject. The classes that
 used to be built in live in `ontologies/ml_paper.ttl` now, and it is loaded only when a

@@ -20,6 +20,15 @@ atlas run architectures/a18.yaml corpus/*.pdf --store store/
 atlas ask architectures/a18.yaml "which results hold under both protocols?" --store store/
 ```
 
+## What they all stand on
+
+The same two halves, whichever architecture is chosen. The **TBox** is the OWL 2 modules a
+manifest names under `schema:` -- with the profile they must stay within, which decides which
+engine may reason over them -- and the SHACL shapes records are held to. The **ABox** is the
+property graph the build chain writes into a store as assertions: nodes labelled with one class,
+links labelled with one relation, every one of them on a verbatim span. An architecture differs
+from another in which steps it runs over these, never in what they are.
+
 ## The rule they all obey
 
 **An answer is built from a walked graph.** Ranking finds where to start; it does not

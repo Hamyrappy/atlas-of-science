@@ -25,11 +25,12 @@ The substrate under them:
 | | |
 |---|---|
 | **Metamodel** | Unchanged in its six concepts. `Schema` now carries its OWL 2 axioms (`atlas/model/owl.py`), the classified hierarchy, the empty classes, its profile and its shapes; `TypeDef.defined` and `PredicateDef.parents` were added. All additive. |
+| **TBox and ABox** | Two shapes, kept apart: the TBox is OWL 2 (`Schema`), the ABox is a labelled property graph of `Node`s and `Link`s in a store, written as assertions and projected to RDF only for SHACL and export (`atlas/ontology/abox.py`). `docs/ontology.md`, *Two halves*, is the statement a change to either has to stay true to. |
 | **Ontologies** | OWL 2 in Turtle under `ontologies/`: `science_core`, `process`, `science_map`, `semantic_units`, `scierc`, `ml_paper`, each a base module plus a module per profile where it has more to say (`science_core_rl`, `_el`, `_ql`, `_dl`, …), and SHACL shapes under `ontologies/shapes/`. YAML packs still load, into the same OWL layer. |
 | **Engines** | `atlas/reason/`: RDFS and OWL 2 RL forward chaining over data with derivations; EL completion-based classification; QL rewriting into unions of conjunctive queries, run as SQL; an SRIQ tableau for OWL 2 DL; SHACL through pySHACL; the profile checker. |
 | **Graph** | `atlas/walk.py` (adjacency, bounded reach, simple paths, components, weights) and `atlas/steps/graph_expand.py` (`Bundle`, `expand`, `widened`). Every selection step widens the relations it is given by the ontology and walks what an engine derived, marked as derived. |
 | **Relations** | `relate_llm` / `relate` extract them; `shacl_validate` checks them in closed world; `assert` writes them; `map_rows` maps them out of tables. |
-| **Stores** | memory, JSON lines, and SQLite with `reach` / `links_among` / `links_touching` / `select` pushed into queries. |
+| **Stores** | The ABox: memory, JSON lines, and SQLite with `reach` / `links_among` / `links_touching` / `select` pushed into queries. |
 | **CLI** | `run`, `ask`, `init`, `variants`. |
 
 Which engine each architecture runs, and why, is the `reasoning:` line of its manifest and a

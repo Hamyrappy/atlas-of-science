@@ -5,6 +5,52 @@ every configuration names one, every step reads the vocabulary it projects, and 
 reason over its axioms. This document says what an ontology file holds, how it is loaded, which
 engine reads which part of it and why, and how SHACL covers what OWL cannot.
 
+## Two halves: a TBox in OWL, an ABox that is a property graph
+
+What a corpus *may* say and what it *did* say are kept apart, in two different shapes, on
+purpose.
+
+**The TBox is OWL 2.** Classes, object properties, datatype properties and the axioms between
+them, in Turtle files under `ontologies/`: a base module per ontology and a module per profile
+where it has more to say (`science_core_rl`, `_el`, `_ql`, `_dl`), plus SHACL shapes under
+`ontologies/shapes/`. Loaded, it becomes one `Schema`: the axioms (`atlas/model/owl.py`), the
+vocabulary they project — class names, the fields each class records, relation names with
+their domain and range — and the hierarchy the EL engine classified. Its version is the hash of
+the bytes read, and every node records the version it was written under.
+
+**The ABox is a labelled property graph.** Not triples: `Node(id, type, fields, spans)` is a
+vertex whose label is one class of the TBox and whose properties are the fields that class
+declares; `Link(id, predicate, src, dst, fields, spans)` is a directed edge whose label is one
+relation of the TBox, an object with its own id, its own fields and its own evidence. It is the
+same shape a property-graph database stores, with three differences that are the point of the
+library:
+
+- **every vertex and every edge carries at least one span** — the verbatim fragment it stands
+  on — and nothing without one is stored (the first invariant);
+- **nothing is updated in place**: a store holds `Assertion`s, append-only, and the graph is the
+  projection `current` makes over them, so a correction supersedes and the history stays;
+- **the schema is not optional**: a node's label is a class the loaded TBox declares, a field is
+  one that class declares, a link's label is a declared relation between the declared domain and
+  range, and a record that breaks this is dropped with the reason (`validate`, and in closed world
+  `shacl_validate`) before anything is written.
+
+A node has exactly one asserted class. Everything else it is — every superclass, every class an
+axiom puts it in — follows from the TBox, is answered by `Schema.is_a` or derived by the RL
+engine with its derivation, and is never written onto the node as a second label. Field values
+are kept as the text states them; the datatype is the TBox's, and decides which property a value
+is written under when the graph is projected.
+
+**RDF is a projection of the ABox, never its storage.** `atlas/ontology/abox.py` writes nodes and
+links as RDF on demand — a node an individual of its class, a field a datatype property value, a
+link a triple and a reified `atlas:Link` carrying its evidence, a span a W3C Web Annotation
+selector pair — for the two consumers that need triples: SHACL validation and an export. The
+stores (`memory`, `jsonl`, `sqlite`) hold the metamodel's own objects, and a store that walks a
+neighbourhood does it over `links` by `src` and `dst`, as a property-graph store would.
+
+The engines sit on the line between the two halves. RDFS and RL read the ABox and write back only
+what the TBox licenses, as derived links standing on their premises' spans; EL and DL read only the
+TBox; QL rewrites a question with the TBox and runs it over the ABox as stored.
+
 ## There is no core
 
 The library ships no vocabulary. `atlas.ontology.load()` with nothing to load returns an empty

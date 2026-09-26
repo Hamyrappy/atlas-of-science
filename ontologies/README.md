@@ -1,5 +1,9 @@
 # Ontologies
 
+These files are the **TBox** -- what a corpus may say. What it did say is the ABox, a property
+graph of nodes and links held in a store, and never lives here (`docs/ontology.md`, *Two
+halves*).
+
 An ontology is OWL 2, written in Turtle, and it is data, not code: the library ships no
 vocabulary of its own, so a corpus is read under whatever ontologies a configuration
 names. These ship inside the wheel; `atlas.ontology.builtin("science_core")` is the path to

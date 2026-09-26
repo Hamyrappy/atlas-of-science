@@ -58,6 +58,11 @@ Six concepts, and nothing of any domain:
   relations they project, each with an IRI and mappings to public vocabularies, and the class
   hierarchy a reasoner computed from them.
 
+`Schema` is the **TBox** — what may be said, in OWL 2, authored as Turtle. Nodes and links are the
+**ABox** — what was said, as a labelled property graph: a node carries one class, a link is a
+directed edge with its own id, fields and evidence. The ABox is stored as a history of assertions
+and projected to RDF only when SHACL or an export needs triples.
+
 ## Install
 
 ```bash

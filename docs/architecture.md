@@ -18,6 +18,12 @@ configuration file, so the vocabulary of a corpus is chosen at run time by the p
 Each spec is resolved beside the configuration that named it, then under the working directory, then
 among the ontologies the wheel ships -- `docs/ontology.md` says where and why.
 
+The ontology is the **TBox** and the store holds the **ABox**, and they have different shapes:
+the TBox is OWL 2 axioms, the ABox is a labelled property graph of `Node`s and `Link`s -- one
+class per node, one relation per link, fields and spans on both -- written as a history of
+assertions and projected to RDF (`atlas/ontology/abox.py`) only when SHACL or an export needs
+triples. `docs/ontology.md`, *Two halves*, says why neither is the other.
+
 The **engines** in `atlas/reason/` reason over it, one per profile: RDFS and OWL 2 RL over the
 data, EL and a DL tableau over the ontology, QL over a query, SHACL over a record in closed world.
 They are libraries, not steps; the steps that run them are named in a configuration like any other.
