@@ -14,12 +14,14 @@ from pathlib import Path
 import pytest
 
 from atlas.model import Schema, Segment, Source, TypeDef
+from atlas.ontology import load_text
+from atlas.ontology.rdf import to_turtle
 from atlas.steps.induce import (
     Candidate,
     InduceOptions,
     PromoteOptions,
     induce,
-    pack,
+    module,
     promote,
     similarity,
 )
@@ -156,14 +158,51 @@ def test_a_candidate_that_passes_everything_becomes_a_proposal_and_not_a_type() 
     result = promote({"candidates": (ready,), "schema": SCHEMA}, PromoteOptions(parent="Study"))
 
     assert [one.label for one in result["promoted"]] == ["Calibration"]
-    assert "name: Calibration" in result["proposal"]
-    assert "parent: Study" in result["proposal"]
+    assert 'atlas:name "Calibration"' in result["proposal"]
+    assert "owl:Class" in result["proposal"]
+    assert result["proposal_problems"] == ()
     # The loaded schema is untouched: a proposal is a file, not an edit.
     assert SCHEMA.find_type("Calibration") is None
 
 
-def test_a_proposal_of_nothing_is_empty_rather_than_an_empty_pack() -> None:
-    assert pack(()) == ""
+def test_a_proposal_loads_with_the_run_ontology_and_is_classified_under_its_parent() -> None:
+    ready = Candidate(term="c", label="Calibration", families=("a", "b", "c"), rounds=2,
+                      definition="a preparation step, performed before measurement",
+                      nearest="Study", similarity=0.2)
+    proposal = promote({"candidates": (ready,), "schema": SCHEMA},
+                       PromoteOptions(parent="Study"))["proposal"]
+
+    merged = load_text(to_turtle(SCHEMA), proposal)
+
+    assert merged.is_a("Calibration", "Study")
+    # A placeholder is not an identity: the loader reads a local IRI as none minted yet.
+    assert "proposed:Calibration" in proposal
+    assert merged.find_type("Calibration").iri is None
+    assert "Closest existing term: Study" in proposal
+
+
+def test_a_proposal_that_leaves_its_class_empty_is_reported_before_anybody_reads_it() -> None:
+    from atlas.model.owl import DisjointClasses, Named, SubClassOf
+
+    # An ontology in which the parent can have no member: whatever is placed under it
+    # can have none either, and the check says so by name.
+    study, process = Named(name="Study"), Named(name="Process")
+    empty = SCHEMA.model_copy(update={
+        "types": (*SCHEMA.types, TypeDef(name="Process", description="Something happening.")),
+        "axioms": (SubClassOf(sub=study, sup=process),
+                   DisjointClasses(classes=(study, process))),
+    })
+    ready = Candidate(term="c", label="Calibration", families=("a", "b", "c"), rounds=2,
+                      definition="a preparation step, performed before measurement")
+
+    result = promote({"candidates": (ready,), "schema": empty}, PromoteOptions(parent="Study"))
+
+    assert any("Calibration: the proposal leaves it with no possible member" in one
+               for one in result["proposal_problems"])
+
+
+def test_a_proposal_of_nothing_is_empty_rather_than_an_empty_module() -> None:
+    assert module((), SCHEMA) == ""
 
 
 def test_the_pool_is_kept_across_rounds_so_stability_means_two_runs(tmp_path: Path) -> None:

@@ -90,7 +90,7 @@ def check(node: Node, schema: Schema, options: CritiqueOptions) -> list[Finding]
 
     if schema.find_type(node.type) is None:
         found.append(Finding(node_id=node.id, check="untyped",
-                             detail=f"type {node.type!r} is not one the pack declares"))
+                             detail=f"type {node.type!r} is not one the ontology declares"))
     elif not normalise(schema.label_of(node)) or schema.label_of(node) == node.type:
         found.append(Finding(
             node_id=node.id, check="unnamed",

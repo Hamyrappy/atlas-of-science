@@ -39,9 +39,16 @@ variant:
     a16: >-
       Paths rather than a connected region, and no prize model: what is optimised is the
       explanation, not the budget.
+  reasoning: >-
+    OWL 2 RL before the enumeration: a path may cross a derived relation -- a
+    chain collapsed into one step, an inverse read forwards -- and the package marks each
+    such step as inference with the rule that licensed it, so an explanation never
+    passes off a consequence of the ontology as a finding.
   spec: docs/architectures/19-explanatory-paths.md
 
-schema: [science_core, scierc]
+schema:
+  ontologies: [science_core_rl, scierc_rl]
+  profile: RL
 
 steps:
   - ingest_pdf
@@ -56,6 +63,7 @@ steps:
 ask:
   - index_nodes
   - {retrieve: {limit: 6}}
+  - entail
   - select_paths:
       depth: 4
       keep: 8

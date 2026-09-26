@@ -42,9 +42,17 @@ variant:
     a18: >-
       The walk is a bounded neighbourhood, not a diffusion: a study connected by three
       indirect hops is out of reach however strongly the graph associates it.
+  reasoning: >-
+    RDFS, the least a graph can reason: a node gets the classes its relations'
+    domains and ranges imply, each with the rule and the link that implied it, and
+    nothing else. The control shares that floor with every other architecture, so what
+    a comparison against it measures is the argument layer, not whether an engine ran.
+    SHACL checks each record in closed world before it is asserted.
   spec: docs/architectures/00-graph-control.md
 
-schema: [scierc]
+schema:
+  ontologies: [scierc]
+  profile: RDFS
 
 steps:
   - ingest_pdf
@@ -53,11 +61,13 @@ steps:
   - validate
   - {relate_llm: {segment: page}}
   - relate
+  - shacl_validate
   - {assert: {agent: run}}
   - index_nodes
 
 ask:
   - index_nodes
   - retrieve
-  - {graph_expand: {depth: 2, limit: 40}}
+  - {entail: {engine: rdfs}}
+  - {graph_expand_entailed: {depth: 2, limit: 40}}
   - graph_answer

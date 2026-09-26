@@ -109,3 +109,19 @@ def test_an_answer_the_package_cannot_support_is_reported_as_a_gap(science: Fixt
 
     assert result["answer"].text == ""
     assert result["gap"] == "the model wrote nothing the package could support"
+
+
+def test_what_a_step_concluded_about_the_package_is_put_in_front_of_the_model(
+    science: Fixture,
+) -> None:
+    from atlas.steps.graph_expand import annotate
+
+    state = state_for(science, "anything")
+    plain = state["client"]
+    graph_answer(state, DEFAULTS)
+    assert "About the package as a whole" not in plain.prompts[0]
+
+    noted = state_for(science, "anything")
+    noted["bundle"] = annotate(noted["bundle"], {}, ["independent support: 1 distinct source"])
+    graph_answer(noted, DEFAULTS)
+    assert "- independent support: 1 distinct source" in noted["client"].prompts[0]

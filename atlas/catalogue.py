@@ -1,7 +1,8 @@
 """The architectures on offer, read off disk so that something can put them in front of a person.
 
 An architecture in this library is not a class and not a flag. It is a configuration:
-a pack or two, a chain of steps, and the options those steps run under. That is the
+the ontologies and the OWL 2 profile they must stay within, a chain of steps with the
+engines some of them run, and the options those steps run under. That is the
 whole mechanism, and it is what makes fifteen of them tractable -- nothing branches on
 which one is in use, because by the time anything runs there is only a pipeline.
 
@@ -32,10 +33,11 @@ from pathlib import Path
 import yaml
 
 from atlas.model import Frozen
+from atlas.reason import engines_of
 
 SHIPPED = (Path(__file__).parent / "architectures", Path(__file__).parents[1] / "architectures")
 """Where the manifests are: inside the installed package, and beside it in a checkout --
-the same two places `atlas.ontology` looks for packs, for the same reason."""
+the same two places `atlas.ontology` looks for ontologies, for the same reason."""
 
 KEY = "variant"
 
@@ -55,10 +57,18 @@ class Variant(Frozen):
     scores: dict[str, int] = {}
     questions: tuple[str, ...] = ()
     differs: dict[str, str] = {}
+    reasoning: str = ""
+    """Which engines it runs over what, and why that profile is the one its questions need."""
     spec: str = ""
     config: str = ""
-    packs: tuple[str, ...] = ()
+    ontologies: tuple[str, ...] = ()
+    profile: str = ""
+    shapes: tuple[str, ...] = ()
+    engines: tuple[str, ...] = ()
     steps: tuple[str, ...] = ()
+    ask: tuple[str, ...] = ()
+    packs: tuple[str, ...] = ()
+    """The same names as `ontologies`, under the name they had when an ontology was a pack."""
 
     @property
     def needs_model(self) -> bool:
@@ -97,35 +107,57 @@ def manifests(root: Path | None = None) -> tuple[Path, ...]:
 def read(path: Path) -> Variant:
     """One manifest as a `Variant`: its own block, plus what the configuration around it says.
 
-    The packs and the steps are read off the configuration rather than repeated in the
-    block, so a manifest cannot describe a chain it does not run. That is the one piece
-    of duplication worth removing here: everything else in the block is prose nothing
-    else can derive.
+    The ontologies, the profile, the shapes, the steps and the engines are read off the
+    configuration rather than repeated in the block, so a manifest cannot describe a
+    chain it does not run or an engine it does not use. That is the one piece of
+    duplication worth removing here: everything else in the block is prose nothing else
+    can derive.
     """
     document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     block = dict(document.get(KEY) or {})
     if not block:
         raise ValueError(f"{path}: an architecture manifest needs a {KEY!r} block")
+    schema = document.get("schema")
+    named = schema if isinstance(schema, dict) else {"ontologies": schema}
+    ontologies = _listed(named.get("ontologies") or named.get("packs"))
+    steps, ask = document.get("steps") or (), document.get("ask") or ()
     return Variant(
         **block,
         config=path.name,
-        packs=_listed(document.get("schema")),
-        steps=tuple(_named(entry) for entry in document.get("steps") or ()),
+        ontologies=ontologies,
+        packs=ontologies,
+        profile=str(named.get("profile") or ""),
+        shapes=_listed(named.get("shapes")),
+        engines=tuple(dict.fromkeys(
+            engine for entry in (*steps, *ask) for engine in engines_of(*_entry(entry))
+        )),
+        steps=tuple(_named(entry) for entry in steps),
+        ask=tuple(_named(entry) for entry in ask),
     )
 
 
 def table(chosen: Iterable[Variant] | None = None) -> str:
-    """The catalogue as lines a terminal can print: id, title, family, what it optimises."""
+    """The catalogue as lines a terminal can print: id, title, profile and engines, summary."""
     rows = tuple(chosen) if chosen is not None else variants()
     width = max((len(row.id) for row in rows), default=2)
     return "\n".join(
-        f"{row.id:<{width}}  {row.title}\n{'':<{width}}  {row.summary}" for row in rows
+        f"{row.id:<{width}}  {row.title}  [{row.profile or '-'}: {', '.join(row.engines)}]\n"
+        f"{'':<{width}}  {row.summary}"
+        for row in rows
     )
 
 
 def _named(entry: str | dict) -> str:
     """The step name of a configuration entry, whether or not it carries options."""
     return entry if isinstance(entry, str) else next(iter(entry))
+
+
+def _entry(entry: str | dict) -> tuple[str, dict]:
+    """A configuration entry as its step name and its options."""
+    if isinstance(entry, str):
+        return entry, {}
+    name = next(iter(entry))
+    return name, dict(entry[name] or {})
 
 
 def _listed(value: str | Iterable[str] | None) -> tuple[str, ...]:

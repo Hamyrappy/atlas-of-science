@@ -47,7 +47,7 @@ def test_a_relation_the_pack_does_not_declare_stops_the_plan_before_it_runs(
 
 
 def test_a_type_the_pack_does_not_know_stops_the_plan(science: Fixture) -> None:
-    with pytest.raises(ValueError, match="no type 'Hypothesis'"):
+    with pytest.raises(ValueError, match="no class 'Hypothesis'"):
         execute_plan(state(science), options(Operator(op="resolve", type="Hypothesis")))
 
 
@@ -77,7 +77,7 @@ def test_a_step_that_reached_nothing_says_so_and_the_plan_continues(
     assert len(trace) == 2
     assert trace.emptied_at is not None
     assert trace.emptied_at.operator.op == "resolve"
-    assert "no node of this pack matches those terms" in trace.steps[0].reason
+    assert "no node of this ontology matches those terms" in trace.steps[0].reason
     assert "nothing reached this step" in trace.steps[1].reason
 
 
@@ -166,3 +166,45 @@ def test_the_package_says_which_operator_selected_each_thing(science: Fixture) -
 
     reasons = set(result["bundle"].reasons.values())
     assert any("selected by resolve" in reason for reason in reasons)
+
+
+def test_a_traversal_crosses_every_relation_the_ontology_makes_a_kind_of_it(
+    science: Fixture,
+) -> None:
+    # bears_on has supports and disputes under it, so crossing it reaches the claim from
+    # both lines, and the trace says which relations were actually asked for.
+    trace = run(
+        science.store,
+        science.schema,
+        options(
+            Operator(op="resolve", type="EvidenceLine"),
+            Operator(op="traverse", predicate="bears_on"),
+        ),
+    )
+
+    assert trace.steps[1].nodes == (science.nodes["claim"].id,)
+    assert len(trace.steps[1].witnesses) == 2
+    assert {"supports(?x, ?y)", "disputes(?x, ?y)"} <= set(trace.steps[1].rewriting)
+
+
+def test_resolving_a_class_also_finds_what_the_ontology_makes_one_by_its_relations(
+    science: Fixture,
+) -> None:
+    from atlas.model import Agent, Assertion, Link, Node
+
+    # A node recorded only as an entity, which a supporting line points at: the range of
+    # `supports` makes it a proposition, and the QL rewriting of Proposition(?x) finds it.
+    loose = Node(id="loose-claim-0001", type="Entity", fields={"name": "loose"},
+                 spans=science.nodes["claim"].spans, schema_version=science.schema.version)
+    link = Link.of(predicate="supports", src=science.nodes["line-for"].id, dst=loose.id,
+                   spans=science.nodes["claim"].spans, schema_version=science.schema.version)
+    agent = Agent(id="run", kind="run")
+    for index, target in enumerate((loose, link)):
+        science.store.assert_(Assertion(id=f"extra-{index}", agent=agent,
+                                        at="2026-01-01T00:00:00+00:00", target=target))
+
+    trace = run(science.store, science.schema, options(Operator(op="resolve", type="Proposition")))
+
+    assert loose.id in trace.steps[0].nodes
+    assert science.nodes["claim"].id in trace.steps[0].nodes
+    assert any("supports(" in one for one in trace.steps[0].rewriting)

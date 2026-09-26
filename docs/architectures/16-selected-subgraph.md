@@ -44,15 +44,31 @@ lets it be read as if it did.
 
 | | |
 |---|---|
-| **Schema** | `science_core` + `scierc`. The selector needs types only for the `whole` rule. |
-| **Reasoner** | None. Selection is optimisation, not inference. |
+| **Schema** | `science_core_el` + `scierc`, under `profile: EL`. The selector reads classes for the `whole` rule, and reads them from the classified hierarchy. |
+| **Reasoner** | OWL 2 EL classification (`classify`, at the start of the ask chain), so the selector's class tests are complete for the ontology — including the subclasses only a definition makes. Selection itself is optimisation, not inference. |
 | **Data** | The store as everywhere else; the selection computed per question. |
 | **Components and reuse** | `Adjacency`, the shared `expand` with a supplied adjacency, `Hit.score` as the prize. |
 | **Evolution** | A new type appears in the graph and the selector handles it with no retraining, because there is nothing trained. When there is, the frozen-encoder evaluation against the greedy control is the measurement, and the fallback is *between graph methods* — never to text retrieval. |
 
-## 4. The three rules that matter more than selection quality
+## 4. The ontology and the engine
 
-### 4.1 An n-ary node is taken whole or not at all
+The selector takes an n-ary node entire or not at all: a type named under `whole` —
+`EvidenceLine`, `Study` — brings its parts with it. That rule is a class test, and a
+class test is only as good as the hierarchy it is asked against. With `science_core_el`
+the hierarchy is not only what somebody wrote as a parent: `SupportingLine` is *defined*
+as an evidence line that supports some proposition, and the EL classifier puts it under
+`EvidenceLine` because of that definition. `Schema.is_a` answers from the classified
+hierarchy, so the `whole` rule applies to every class the ontology puts under the ones
+named, and `classify` at the start of the ask chain records that classification — with
+`complete: true` when the EL engine read every axiom, which for an EL ontology it does.
+
+The engine does not touch the selection itself, and nothing it concludes is written down.
+Relations named under `parts` and `expand` are widened the same way as everywhere else,
+by the relations the ontology puts under them.
+
+## 5. The three rules that matter more than selection quality
+
+### 5.1 An n-ary node is taken whole or not at all
 
 A study relates a method, a dataset, a measure and a number, and it means nothing in
 pieces. A selector that kept the method and the number and dropped the dataset has
@@ -63,21 +79,21 @@ Types named in `whole` bring their `parts` relations with them, and are scored w
 taking such a node means taking its parts, so the prize it offers is the prize of the
 whole group.
 
-### 4.2 The evidence closure is not optional
+### 5.2 The evidence closure is not optional
 
 The chosen region goes through the same `expand` as everything else — which means the
 objections are pulled in whatever the budget did, exactly as everywhere in this library.
 `test_the_closure_is_not_optional_and_keeps_the_objection` selects a region of two nodes
 and still finds the opposing position in the package.
 
-### 4.3 When the budget binds, take fewer things with complete grounds
+### 5.3 When the budget binds, take fewer things with complete grounds
 
 Not more things without them. `trim` drops the lowest-prized **roots** and reselects,
 rather than truncating the closure, and reports how many it dropped. A package of ten
 results with no evidence is worse than three with it, and a package that quietly answered
 a smaller question would be worse still — which is why `selection.trimmed` travels back.
 
-## 5. The algorithm, exactly
+## 6. The algorithm, exactly
 
 ```
 prizes   = hit.score / max(score)          # normalised, so the edge cost means something
@@ -100,7 +116,7 @@ worth a node of middling relevance, or the region grows to the corpus. A cost of
 nothing is ever attached, which is tested, because a knob that cannot be turned off is
 not a knob.
 
-## 6. Competency questions
+## 7. Competency questions
 
 | Question | What the selection gives |
 |---|---|
@@ -108,7 +124,7 @@ not a knob.
 | Which grounds did the selector leave out? | The difference between the selection and the closed package |
 | What survives a strict context budget? | `trim`, with the count of what it dropped |
 
-## 7. Risks and acceptance
+## 8. Risks and acceptance
 
 - **Greedy, and unbounded in quality.** The first node fixes the region; a graph where
   the interesting connection runs through a low-prized hub is one this will miss. That
@@ -122,19 +138,21 @@ Acceptance: at equal budget, the region must beat a fixed-depth walk on the vagu
 questions and must never lose an objection. The second is tested; the first needs a
 corpus.
 
-## 8. Running it
+## 9. Running it
 
 ```bash
 atlas run architectures/a16.yaml corpus/*.pdf --store store/
 atlas ask architectures/a16.yaml "what connects these two lines of work?" --store store/
 ```
 
-## 9. Implementation
+## 10. Implementation
 
 | Part | Where |
 |---|---|
+| Vocabulary | `ontologies/science_core_el.ttl`, `ontologies/scierc.ttl` |
+| Engine | `atlas/reason/el.py`, `atlas/steps/classify.py`; `Schema.is_a` |
 | Selection | `atlas/steps/subgraph.py` (`grow`, `Selection`, `_prizes`) |
 | Budget behaviour | `atlas/steps/subgraph.py` (`trim`) |
 | Closure | `atlas/steps/graph_expand.py` (`expand`, with a supplied adjacency) |
 | Manifest | `architectures/a16.yaml` |
-| Tests | `tests/test_subgraph.py` |
+| Tests | `tests/test_subgraph.py`, `tests/test_classify.py` |

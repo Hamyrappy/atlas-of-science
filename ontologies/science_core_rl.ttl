@@ -1,0 +1,87 @@
+# The science core for the OWL 2 RL engine: what can be run as rules over what was
+# extracted, and never invents anything.
+#
+# Everything here is an axiom the RL rule table can execute, and each was chosen because a
+# question an architecture answers depends on it:
+#
+# * part_of is transitive and has_part its converse, so "what is this a part of" finds the
+#   whole chain from one asserted step at a time;
+# * depends_on is transitive over directly_depends_on, which is asymmetric -- a computation
+#   that consumed another's output and whose output that one consumed is a record with a
+#   cycle in it, and the engine says so as a clash (`prp-asyp`) with both links as premises.
+#   A longer cycle is not expressible as an OWL 2 axiom on a transitive relation (the
+#   global restrictions forbid it), which is why the shapes check it in closed world;
+# * supports and disputes are disjoint relations: one line of argument cannot be both for
+#   and against the same proposition, and a record that says it is contradicts itself;
+# * computed_from_data is a property chain -- derived_from, then used_dataset, optionally
+#   through any number of depends_on -- so "which results rest on this dataset" is
+#   answered for results nobody linked to the data directly;
+# * the defined classes get their sufficient conditions. Only sufficient ones: "a line
+#   that supports some proposition is a SupportingLine" is RL, "every SupportingLine
+#   supports some proposition" would need an individual nobody mentioned and is not;
+# * same_as says two records are of one individual -- one study that two registries
+#   published under two ids. A configuration that names it under `entail: {identity:
+#   [same_as]}` gives it the meaning of owl:sameAs, so every fact about one becomes a fact
+#   about the other, each with the derivation that says why (`eq-rep`).
+
+@prefix core:  <https://w3id.org/atlas-of-science/core#> .
+@prefix atlas: <https://w3id.org/atlas-of-science/substrate#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix obo:   <http://purl.obolibrary.org/obo/> .
+@prefix evi:   <https://w3id.org/EVI#> .
+@prefix sepio: <https://w3id.org/sepio-framework/sepio-linkml/> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+
+<https://w3id.org/atlas-of-science/science_core_rl>
+    a owl:Ontology ;
+    rdfs:label "Atlas of Science: the scientific argument, for rules over data" ;
+    owl:versionIRI <https://w3id.org/atlas-of-science/science_core_rl/0.2> ;
+    owl:imports <https://w3id.org/atlas-of-science/science_core> ;
+    atlas:profile "RL", "DL" .
+
+# ---- how the relations behave -------------------------------------------------------------
+
+core:partOf a owl:TransitiveProperty .
+core:hasPart owl:inverseOf core:partOf .
+core:comparableWith a owl:SymmetricProperty .
+core:dependsOn a owl:TransitiveProperty .
+core:directlyDependsOn a owl:AsymmetricProperty .
+core:supports owl:propertyDisjointWith core:disputes .
+
+core:sameIndividualAs a owl:ObjectProperty, owl:SymmetricProperty, owl:TransitiveProperty ;
+    atlas:name "same_as" ;
+    skos:definition "The two records are of one individual: one study, one dataset, recorded twice - by two registries, or by two extractions of two versions of a paper." ;
+    skos:closeMatch owl:sameAs .
+
+core:computedFromData owl:propertyChainAxiom ( core:derivedFrom core:usedDataset ) ,
+                                             ( core:derivedFrom core:dependsOn core:usedDataset ) .
+
+# ---- what makes something one of the defined classes --------------------------------------
+
+[ owl:intersectionOf ( sepio:EvidenceLine
+    [ a owl:Restriction ; owl:onProperty core:supports ; owl:someValuesFrom sepio:Proposition ] ) ]
+    rdfs:subClassOf core:SupportingLine .
+
+[ owl:intersectionOf ( sepio:EvidenceLine
+    [ a owl:Restriction ; owl:onProperty core:disputes ; owl:someValuesFrom sepio:Proposition ] ) ]
+    rdfs:subClassOf core:DisputingLine .
+
+[ a owl:Restriction ; owl:onProperty [ owl:inverseOf core:supports ] ;
+  owl:someValuesFrom sepio:EvidenceLine ]
+    rdfs:subClassOf core:SupportedProposition .
+
+[ a owl:Restriction ; owl:onProperty [ owl:inverseOf core:disputes ] ;
+  owl:someValuesFrom sepio:EvidenceLine ]
+    rdfs:subClassOf core:ContestedProposition .
+
+[ owl:intersectionOf ( sepio:StudyResult
+    [ a owl:Restriction ; owl:onProperty core:observedUnder ; owl:someValuesFrom core:Context ] ) ]
+    rdfs:subClassOf core:ConditionedResult .
+
+[ owl:intersectionOf ( sepio:StudyResult
+    [ a owl:Restriction ; owl:onProperty core:derivedFrom ; owl:someValuesFrom
+        [ owl:intersectionOf ( evi:Computation
+            [ a owl:Restriction ; owl:onProperty core:usedDataset ; owl:someValuesFrom evi:Dataset ]
+            [ a owl:Restriction ; owl:onProperty core:usedSoftware ; owl:someValuesFrom evi:Software ] ) ] ] ) ]
+    rdfs:subClassOf core:RecomputableResult .

@@ -34,9 +34,17 @@ from pydantic import Field
 
 from atlas.model import Frozen, Node
 from atlas.steps import State, register
-from atlas.steps.graph_expand import Bundle
+from atlas.steps.entail import implied, widen
+from atlas.steps.graph_expand import Bundle, annotate
 from atlas.text import normalise
 from atlas.walk import Adjacency
+
+OWN = (
+    "Whether a result's own fields count among its conditions. Off for an ontology in which "
+    "every class states itself in one shared field -- a formulation, a statement -- where a "
+    "result's own wording is not a condition of it, and reading it as one compares two "
+    "results by what they say rather than by what they were obtained under."
+)
 
 Verdict = Literal["comparable", "partial", "insufficient"]
 """What may be said about two results side by side: everything matched, some of it did,
@@ -72,15 +80,16 @@ class Comparison(Frozen):
 class CompareOptions(Frozen):
     """Which types are results, which relation leads to their conditions, and what converts.
 
-    Everything here is the pack's vocabulary and arrives as configuration. `conditions`
+    Everything here is the ontology's vocabulary and arrives as configuration. `conditions`
     is the relation from a result to the thing describing what it was obtained under;
     `fields` are the condition fields that have to agree; `units` is the declared
     conversion table, written as `from:to` to a factor.
     """
 
-    type: str = Field(min_length=1, description="The pack type whose instances are compared")
+    type: str = Field(min_length=1, description="The ontology type whose instances are compared")
     conditions: tuple[str, ...] = Field(default=(), description="Relations leading to conditions")
     fields: tuple[str, ...] = Field(default=("conditions",))
+    own: bool = Field(True, description=OWN)
     value_field: str = "value"
     unit_field: str = "unit"
     comparable: tuple[str, ...] = Field(
@@ -91,10 +100,15 @@ class CompareOptions(Frozen):
     )
 
 
-@register("compare", requires=("bundle", "store"), produces=("comparisons", "comparable"),
-          options=CompareOptions)
+@register("compare", requires=("bundle", "store"),
+          produces=("comparisons", "comparable", "bundle"), options=CompareOptions)
 def compare(state: State, options: CompareOptions) -> State:
-    """Sort the results of the package against the first of them, and report every exclusion."""
+    """Sort the results of the package against the first of them, and report every exclusion.
+
+    The verdicts are also written into the package (`annotate`), beside the reason each
+    result is there, so the answer is told which results may be put side by side and on
+    which condition the others were excluded -- rather than averaging what it was shown.
+    """
     bundle: Bundle = state["bundle"]
     schema = state.get("schema")
     results = [
@@ -103,7 +117,12 @@ def compare(state: State, options: CompareOptions) -> State:
     ]
     if not results:
         return {"comparisons": (), "comparable": 0}
-    adjacency = Adjacency.of(state["store"].links())
+    # The graph as the ontology makes it: a condition reached through a relation the
+    # ontology puts under a named one, or through a link the engine derived, counts.
+    options = options.model_copy(update={"conditions": widen(state, options.conditions),
+                                         "comparable": widen(state, options.comparable)})
+    links = implied(state)
+    adjacency = Adjacency.of(links)
     held = {node.id: node for node in state["store"].nodes()}
     conditions = {
         node.id: _conditions(node, adjacency, held, options) for node in results
@@ -113,7 +132,11 @@ def compare(state: State, options: CompareOptions) -> State:
     found = tuple(
         _compare(baseline, other, conditions, asserted, options) for other in rest
     )
-    return {"comparisons": found, "comparable": sum(one.verdict == "comparable" for one in found)}
+    said = {baseline.id: "the result the others are compared against"}
+    for one in found:
+        said[one.node_id] = f"{one.verdict} against the baseline: {one.reason}"
+    return {"comparisons": found, "comparable": sum(one.verdict == "comparable" for one in found),
+            "bundle": annotate(bundle, said)}
 
 
 def convert(value: str, unit: str, into: str, table: Mapping[str, float]) -> Conversion | None:
@@ -202,7 +225,8 @@ def _conditions(
 ) -> dict[str, str]:
     """Every condition of one result: its own fields, plus those of what it points at."""
     found = {
-        field: normalise(node.fields.get(field, "")) for field in options.fields
+        field: normalise(node.fields.get(field, "")) if options.own else ""
+        for field in options.fields
     }
     for edge in adjacency.edges(node.id, backward=False):
         if options.conditions and edge.predicate not in options.conditions:

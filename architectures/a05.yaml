@@ -16,7 +16,7 @@ variant:
     carried out, the conditions a result holds under, negative results as first-class
     results, and the closure a retraction reaches.
   mechanism: >-
-    A protocol and a run are separate identities and the pack declares them disjoint, so
+    A protocol and a run are separate identities and the ontology declares them disjoint, so
     a file of instructions cannot be classified as a performed experiment. `align` puts
     the two step lists side by side and names four kinds of departure. `compare` sorts
     results into comparable, partially comparable and insufficient, and a condition
@@ -42,9 +42,19 @@ variant:
     a06: >-
       What is checked is the science -- conditions, plan against run, dependencies --
       rather than the extraction that produced the record.
+  reasoning: >-
+    OWL 2 RL over the data. The process ontology's property chains carry an
+    experiment's conditions to every result it yielded (`obtained_under`, a kind of
+    `observed_under`) and its protocol's steps to the run (`planned_for`), so `compare`
+    and `align` read conditions and plans nobody linked directly -- each marked derived
+    and standing on the quotes of its premises. SHACL checks in closed world what OWL
+    cannot: a result with no conditions recorded, a computation that depends on itself.
   spec: docs/architectures/05-process-atlas.md
 
-schema: [science_core, process]
+schema:
+  ontologies: [process_rl]
+  profile: RL
+  shapes: [science_core, process]
 
 steps:
   - ingest_pdf
@@ -53,7 +63,9 @@ steps:
   - validate
   - {relate_llm: {segment: page}}
   - relate
+  - shacl_validate
   - {assert: {agent: run}}
+  - entail
   - align:
       plan: ProtocolStep
       run: ExecutionStep
@@ -63,7 +75,8 @@ steps:
 ask:
   - index_nodes
   - retrieve
-  - {graph_expand: {depth: 3, limit: 60, supports: [supports], opposes: [disputes]}}
+  - entail
+  - {graph_expand_entailed: {depth: 3, limit: 60, supports: [supports], opposes: [disputes]}}
   - compare:
       type: StudyResult
       conditions: [observed_under, under_condition]

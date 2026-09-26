@@ -16,16 +16,17 @@ variant:
     -- checked before anything is written under it, with the entailment it licenses
     available at query time and marked as inference.
   mechanism: >-
-    `formal_check` inspects the pack in four groups: hierarchy, disjointness, relations
-    and inverses. A type whose ancestry contains two disjoint types is unsatisfiable and
+    `formal_check` inspects the ontology in four groups -- hierarchy, disjointness,
+    relations and inverses -- and then hands every axiom to the DL tableau, which
+    decides whether the ontology has a model and whether each class can have a member. A type whose ancestry contains two disjoint types is unsatisfiable and
     fails the release with no instance required, because the first instance would be a
-    node that cannot exist. A check the budget stopped is reported as not run, so a pack
-    too large to check fails rather than passes. The gate is strict in the build chain,
-    which means a broken pack stops a run before it writes anything.
+    node that cannot exist. A check the budget stopped is reported as not run, so an
+    ontology too large to check fails rather than passes. The gate is strict in the build chain,
+    which means a broken ontology stops a run before it writes anything.
   family: entailment traversal
   optimises: catching a contradiction in the vocabulary before a corpus is written under it
   cost: >-
-    Curation. An expressive pack is harder to write and harder to keep satisfiable, and
+    Curation. An expressive ontology is harder to write and harder to keep satisfiable, and
     if a lighter profile answers the same questions this buys nothing.
   needs: [model]
   scores: {relevance: 75, novelty: 70, prospect: 83, total: 77}
@@ -41,12 +42,22 @@ variant:
       What is checked is the ontology, not the extraction -- and it is checked over the
       schema only, never over data, where open-world inference would invent the missing
       spans the markup layer exists to refuse.
+  reasoning: >-
+    OWL 2 DL, checked by the tableau: unions, qualified cardinalities, universals
+    and definitions through inverses, with the release refused if the ontology has no
+    model or a class can have no member. Over the data only the RL engine runs -- it is
+    sound for OWL 2 DL, and the axioms it cannot use are reported by name -- because a
+    DL reasoner over extracted data would conclude that a missing condition exists and
+    have nothing to show for it.
   spec: docs/architectures/15-expressive-ontology.md
 
-schema: [science_core, process, science_map]
+schema:
+  ontologies: [science_core_dl, process_rl, science_map_rl]
+  profile: DL
 
 steps:
-  - {formal_check: {strict: true, budget: 2000}}
+  - {formal_check: {strict: true, engine: dl, budget: 2000}}
+  - {classify: {engine: dl, strict: true}}
   - ingest_pdf
   - {extract_llm: {segment: page}}
   - relocate
@@ -57,7 +68,7 @@ steps:
   - index_nodes
 
 ask:
-  - {formal_check: {strict: true}}
+  - {formal_check: {strict: true, engine: dl}}
   - index_nodes
   - retrieve
   - {entail: {rounds: 8}}

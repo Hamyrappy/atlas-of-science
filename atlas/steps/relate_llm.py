@@ -1,8 +1,8 @@
 """Asking a model how the nodes of one segment stand to each other, one call per segment.
 
 The mirror of `extract_llm`, and the same discipline: the predicates on offer are read
-out of whatever pack was loaded, with the types each one connects, so this module names
-no relation and swapping the pack swaps what may be claimed. The model is shown the
+out of whatever ontology was loaded, with the types each one connects, so this module names
+no relation and swapping the ontology swaps what may be claimed. The model is shown the
 nodes that were already placed in this segment, under the reference each is cited by,
 and is asked which pairs the text relates and which words say so. Offsets are never
 asked for, and neither are node ids: it picks from references it was given, so an

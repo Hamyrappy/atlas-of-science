@@ -1,0 +1,30 @@
+# The process layer for the OWL 2 RL engine: carrying an experiment's conditions and plan to
+# everything it touched.
+#
+# Two property chains, and each answers a question the process architecture exists for
+# without anybody having to assert the answer:
+#
+# * a result was obtained under every condition of the experiment that yielded it --
+#   `yielded` read backwards, then `under_condition`. That is what `compare` needs to put
+#   two results side by side only when their conditions are known;
+# * an experiment was meant to carry out every step its protocol plans -- `follows`, then
+#   `planned_step`. That is what `align` compares the steps that happened against.
+#
+# Both chains go through relations the extractor asserts, so every consequence stands on
+# quotes, and neither invents an individual.
+
+@prefix proc:  <https://w3id.org/atlas-of-science/process#> .
+@prefix atlas: <https://w3id.org/atlas-of-science/substrate#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+
+<https://w3id.org/atlas-of-science/process_rl>
+    a owl:Ontology ;
+    rdfs:label "Atlas of Science: plans and runs, for rules over data" ;
+    owl:versionIRI <https://w3id.org/atlas-of-science/process_rl/0.2> ;
+    owl:imports <https://w3id.org/atlas-of-science/process>,
+                <https://w3id.org/atlas-of-science/science_core_rl> ;
+    atlas:profile "RL", "DL" .
+
+proc:obtainedUnder owl:propertyChainAxiom ( [ owl:inverseOf proc:yielded ] proc:underCondition ) .
+proc:plannedFor owl:propertyChainAxiom ( proc:follows proc:plannedStep ) .

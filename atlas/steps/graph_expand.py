@@ -21,7 +21,7 @@ node at the other end. A package that fits its budget by losing the one study th
 disagrees is worse than one that admits it is partial.
 
 **Nothing here names a relation.** Which predicates are worth following, which mean
-support and which mean dispute are the pack's words and arrive as options. The step
+support and which mean dispute are the ontology's words and arrive as options. The step
 knows only that some relations were pointed at.
 
 `Bundle` lives here rather than in `atlas/model/` by the rule in CLAUDE.md: it is not
@@ -35,7 +35,7 @@ from collections.abc import Iterable, Mapping
 
 from pydantic import Field
 
-from atlas.model import Frozen, Link, Node
+from atlas.model import Frozen, Link, Node, Schema
 from atlas.steps import State, register
 from atlas.steps.retrieve import Hit
 from atlas.store import Store
@@ -67,6 +67,10 @@ class Bundle(Frozen):
     snapshot: str = Field(default="", description="Schema version the package was built under")
     method: str = Field(default="", description="Which architecture's selection produced it")
     partial: bool = False
+    notes: tuple[str, ...] = Field(
+        default=(),
+        description="What a step that read the package concluded about it as a whole",
+    )
 
     @property
     def grounded(self) -> bool:
@@ -88,10 +92,10 @@ class Bundle(Frozen):
 class GraphExpandOptions(Frozen):
     """Which relations to walk, how far, and which of them carry a position.
 
-    `follow` empty means every relation the pack declares; naming a few is how a
+    `follow` empty means every relation the ontology declares; naming a few is how a
     configuration says that only some of them explain anything about its questions.
-    `supports` and `opposes` are the pack's own predicate names, and the step neither
-    knows nor guesses them: a pack that spells them differently says so here.
+    `supports` and `opposes` are the ontology's own predicate names, and the step neither
+    knows nor guesses them: an ontology that spells them differently says so here.
     """
 
     depth: int = Field(DEPTH, ge=0)
@@ -115,6 +119,7 @@ def graph_expand(state: State, options: GraphExpandOptions) -> State:
         reasons={hit.node.id: f"ranked {hit.score:.3f}" for hit in hits},
         snapshot=_snapshot(state),
         method="graph_expand",
+        schema=state.get("schema"),
     )
     return {"bundle": bundle}
 
@@ -128,6 +133,7 @@ def expand(
     snapshot: str = "",
     method: str = "",
     adjacency: Adjacency | None = None,
+    schema: Schema | None = None,
 ) -> Bundle:
     """Build a package around some nodes: the shared body of every architecture's retrieval.
 
@@ -140,7 +146,14 @@ def expand(
     handing over every link it holds. The caller has then already decided which part of
     the graph is in play; everything after that is the same, which is what keeps one
     package contract across architectures that fetch their graphs very differently.
+
+    `schema`, when given, widens every relation the options name to the relations the
+    ontology makes kinds of it (`atlas.reason.ql.relations`): following `bears_on` follows
+    `supports` and `disputes`, and an objection named `disputes` is pulled in under every
+    relation that is a sub-relation of it. Without a schema the names are taken as written.
     """
+    if schema is not None:
+        options = widened(options, schema)
     roots = tuple(dict.fromkeys(roots))
     adjacency = Adjacency.of(store.links(), options.follow) if adjacency is None else adjacency
     reached = reach(adjacency, roots, depth=options.depth, limit=options.limit)
@@ -179,6 +192,37 @@ def expand(
         method=method,
         partial=reached.partial,
     )
+
+
+def annotate(bundle: Bundle, reasons: Mapping[str, str], notes: Iterable[str] = ()) -> Bundle:
+    """The package with what a later step concluded written into it, beside what was there.
+
+    A step that reads a package and judges it -- which results may be compared, what kind
+    of conflict two positions are, how independent the support is -- has to leave its
+    verdict where the answer will see it, or the verdict is computed and then lost. It
+    goes into the reason a node is there, after the reason already given, and a verdict
+    about the package as a whole goes into `notes`. Nothing is removed: a node the verdict
+    goes against is still what a source said.
+    """
+    written = dict(bundle.reasons)
+    held = {node.id for node in bundle.nodes}
+    for node_id, said in reasons.items():
+        if node_id in held and said:
+            written[node_id] = f"{written[node_id]}; {said}" if node_id in written else said
+    return bundle.model_copy(update={"reasons": written,
+                                     "notes": (*bundle.notes, *(one for one in notes if one))})
+
+
+def widened(options: GraphExpandOptions, schema: Schema) -> GraphExpandOptions:
+    """The options with every named relation widened to what the ontology makes kinds of it."""
+    from atlas.reason.ql import relations
+
+    axioms = schema.every_axiom()
+    return options.model_copy(update={
+        "follow": relations(axioms, options.follow),
+        "supports": relations(axioms, options.supports),
+        "opposes": relations(axioms, options.opposes),
+    })
 
 
 def _snapshot(state: State) -> str:

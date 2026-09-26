@@ -36,7 +36,9 @@ from pydantic import Field
 
 from atlas.model import Frozen, Node
 from atlas.steps import State, register
-from atlas.steps.graph_expand import Bundle
+from atlas.steps.compare import OWN
+from atlas.steps.entail import implied, widen
+from atlas.steps.graph_expand import Bundle, annotate
 from atlas.text import normalise
 from atlas.walk import Adjacency
 
@@ -69,15 +71,17 @@ class ReconcileOptions(Frozen):
     opposes: tuple[str, ...] = Field(min_length=1)
     conditions: tuple[str, ...] = Field(default=(), description="Relations reaching conditions")
     fields: tuple[str, ...] = Field(default=("conditions",))
+    own: bool = Field(True, description=OWN)
 
 
-@register("reconcile", requires=("bundle", "store"), produces=("conflicts", "disagreements"),
-          options=ReconcileOptions)
+@register("reconcile", requires=("bundle", "store"),
+          produces=("conflicts", "disagreements", "bundle"), options=ReconcileOptions)
 def reconcile(state: State, options: ReconcileOptions) -> State:
     """Pair up the opposed positions of the package and say what is true about each pair."""
     bundle: Bundle = state["bundle"]
     store = state["store"]
-    adjacency = Adjacency.of(store.links())
+    adjacency = Adjacency.of(implied(state))
+    options = options.model_copy(update={"conditions": widen(state, options.conditions)})
     held = {node.id: node for node in store.nodes()}
     for node in bundle.nodes:
         held.setdefault(node.id, node)
@@ -89,8 +93,14 @@ def reconcile(state: State, options: ReconcileOptions) -> State:
         for one in for_[about]
         for other in against[about]
     )
+    said: dict[str, str] = {}
+    for one in found:
+        for side, other in ((one.supporting, one.opposing), (one.opposing, one.supporting)):
+            verdict = f"{one.verdict} with the position {other} takes: {one.reason}"
+            said[side] = f"{said[side]}; {verdict}" if side in said else verdict
     return {"conflicts": found,
-            "disagreements": sum(one.verdict == "disagreement" for one in found)}
+            "disagreements": sum(one.verdict == "disagreement" for one in found),
+            "bundle": annotate(bundle, said)}
 
 
 def _sides(bundle: Bundle, predicates: tuple[str, ...]) -> dict[str, list[str]]:
@@ -167,7 +177,10 @@ def _conditions(
     node: Node, held: Mapping[str, Node], adjacency: Adjacency, options: ReconcileOptions
 ) -> dict[str, str]:
     """A position's conditions: its own fields, plus those of everything it reaches."""
-    found = {field: normalise(node.fields.get(field, "")) for field in options.fields}
+    found = {
+        field: normalise(node.fields.get(field, "")) if options.own else ""
+        for field in options.fields
+    }
     frontier = [node.id]
     seen = {node.id}
     for _hop in range(2):

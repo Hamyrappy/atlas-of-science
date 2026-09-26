@@ -139,6 +139,12 @@ def graph_answer(state: State, options: GraphAnswerOptions) -> State:
         relations=relations(bundle, schema),
         positions=positions(bundle, schema),
     )
+    if bundle.notes:
+        # Only when there is something to say, so every other architecture's prompt -- and
+        # the cache in front of it -- is exactly what it was.
+        prompt += "\nAbout the package as a whole:\n" + "\n".join(
+            f"- {one}" for one in bundle.notes
+        )
     reply = client.complete(prompt, system=options.system)
     text, citations = keep_cited(reply.text, bundle.refs())
     written = [line for line in reply.text.splitlines() if line.strip()]

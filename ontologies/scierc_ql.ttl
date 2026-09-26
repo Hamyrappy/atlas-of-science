@@ -1,0 +1,26 @@
+# SciERC for the OWL 2 QL engine: the scheme's disjointness and symmetry, which a
+# rewritten query can use, and nothing that composes.
+#
+# `compare` asked in one direction finds the pairs recorded in the other, because the
+# rewriting adds the inverse atom. The disjointness is what a QL engine checks for
+# consistency, by asking the store for anything of two labels at once. Transitivity is not
+# here, and cannot be: a query rewritten with a transitive relation is not a finite union.
+
+@prefix scierc: <https://w3id.org/atlas-of-science/scierc#> .
+@prefix atlas: <https://w3id.org/atlas-of-science/substrate#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+
+<https://w3id.org/atlas-of-science/scierc_ql>
+    a owl:Ontology ;
+    rdfs:label "SciERC, for query rewriting" ;
+    owl:versionIRI <https://w3id.org/atlas-of-science/scierc_ql/0.2> ;
+    owl:imports <https://w3id.org/atlas-of-science/scierc> ;
+    atlas:profile "QL", "DL" .
+
+[] a owl:AllDisjointClasses ;
+   owl:members ( scierc:Task scierc:Method scierc:Metric scierc:Material
+                 scierc:OtherScientificTerm scierc:Generic ) .
+
+scierc:compare a owl:SymmetricProperty .
+scierc:conjunction a owl:SymmetricProperty .

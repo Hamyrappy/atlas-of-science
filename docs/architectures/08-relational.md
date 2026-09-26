@@ -39,15 +39,39 @@ ran.
 
 | | |
 |---|---|
-| **Schema** | `science_core` + `scierc`, unchanged. The SQL schema is derived physical structure and carries no meaning of its own. |
-| **Reasoner** | None. What the database computes is reachability, not entailment. |
+| **Schema** | `science_core_ql` + `scierc_ql`, under `profile: QL`. The SQL schema is derived physical structure and carries no meaning of its own; the meaning is in the ontology, and reaches the database only as a rewritten query. |
+| **Reasoner** | OWL 2 QL, over the query: the relations `graph_expand_sql` is given are rewritten by the ontology — every sub-relation, every inverse — before any SQL is written. What the database computes is reachability, not entailment, and nothing is materialised. |
 | **Data** | `assertions` (the log, append-only), `nodes` and `links` (the projection, maintained on write), plus sources, runs and schemas. |
 | **Components and reuse** | `sqlite3` with a recursive CTE and `json_each`; the shared `expand`, `Bundle` and `graph_answer`. |
-| **Evolution** | A pack change moves `Schema.version` as everywhere; the projection is unaffected, because it stores objects whole rather than columns per field. |
+| **Evolution** | An ontology change moves `Schema.version` as everywhere; the projection is unaffected, because it stores objects whole rather than columns per field. |
 
-## 4. The store
+## 4. The ontology and the engine
 
-### 4.1 Tables
+OWL 2 QL is the profile the W3C designed for exactly this architecture: data in a
+relational database, an ontology over it, and questions answered by **rewriting the query**
+rather than by reasoning over the data. Every QL ontology has the property that the certain
+answers to a conjunctive query are the answers of a finite union of plain queries over what
+is stored, so the database never has to know an ontology exists.
+
+`atlas/reason/ql.py` implements the rewriting (PerfectRef: atoms replaced by what the
+ontology puts under them, unified where an existential allows it) and compiles each query
+of the union to SQL (`to_sql`), which `SqliteStore.select` runs read-only. In this
+architecture it is applied where the graph is fetched: `graph_expand_sql` widens every
+relation its options name — `follow`, `supports`, `opposes` — to the relations the
+ontology makes kinds of them before `links_touching` is asked, so an objection recorded
+under a sub-relation of `disputes`, or a `has_part` read as the inverse of `part_of`, is
+fetched without anybody having spelled it. For a question that is a query rather than a
+ranking, the `query` step takes a conjunctive query directly —
+`q(?line, ?claim) :- bears_on(?line, ?claim)` — answers it by the same rewriting, and walks
+the answers into a package.
+
+Nothing is inferred into a table. A row that is not stored is not an answer, which is what
+the first invariant needs from a reasoner that could otherwise conclude that something
+exists.
+
+## 5. The store
+
+### 5.1 Tables
 
 | Table | What it holds |
 |---|---|
@@ -56,7 +80,7 @@ ran.
 | `links` | The projection: one row per currently-claimed link, indexed by both ends |
 | `sources`, `runs`, `schemas` | As the protocol requires |
 
-### 4.2 The one invariant that costs something
+### 5.2 The one invariant that costs something
 
 The projection is maintained **on write**, in the same transaction as the assertion:
 
@@ -75,7 +99,7 @@ what changed is that `current` is precomputed rather than replayed.
 That is the bargain that makes the recursive query possible at all — a CTE cannot run
 over a log it would have to project first.
 
-### 4.3 The query
+### 5.3 The query
 
 ```sql
 WITH RECURSIVE walk(id, depth) AS (
@@ -101,9 +125,9 @@ Three details carry weight:
 One row beyond the limit is fetched so that *"there was more"* can be reported rather
 than guessed.
 
-## 5. Pipeline
+## 6. Pipeline
 
-### 5.1 Build
+### 6.1 Build
 
 ```
 ingest_pdf → extract_llm → relocate → validate → relate_llm → relate → assert → index_nodes
@@ -112,7 +136,7 @@ ingest_pdf → extract_llm → relocate → validate → relate_llm → relate �
 Identical to the others. The manifest names the store — `{sqlite: {path: store/atlas.db}}`
 — and that is the whole of the difference at build time.
 
-### 5.2 Ask
+### 6.2 Ask
 
 ```
 index_nodes → retrieve → graph_expand_sql → graph_answer
@@ -120,6 +144,8 @@ index_nodes → retrieve → graph_expand_sql → graph_answer
 
 `graph_expand_sql`:
 
+0. rewrites the relations it was given with the ontology (`widened`), so each query
+   below asks for every relation the ontology makes a kind of one of them;
 1. asks the store for `reach(roots, depth, limit)` — the neighbourhood, by query;
 2. asks for `links_among(ids)` — the relations inside it;
 3. asks for `links_touching(ids, opposes)` — **the objections that reach into it from
@@ -134,7 +160,7 @@ The package that comes out is the same `Bundle`, with `method: "graph_expand_sql
 with the same content and asserts both routes return the same nodes, links and
 objections.
 
-## 6. Competency questions
+## 7. Competency questions
 
 | Question | How the relational route answers it |
 |---|---|
@@ -142,7 +168,7 @@ objections.
 | Which studies are comparable? | The neighbourhood, then `compare` as in architecture 5 |
 | What does the store currently claim? | `nodes()` / `links()` over the projection, without replaying the log |
 
-## 7. Risks and acceptance
+## 8. Risks and acceptance
 
 - **The projection can drift from the log** if anything writes around `assert_`. Nothing
   does, and the test that proves the log is whole after a supersede is the guard.
@@ -154,22 +180,25 @@ objections.
 Acceptance: the two routes must agree on the same content, and the relational one must
 still hold the objection under a budget that excludes its far end. Both are tested.
 
-## 8. Running it
+## 9. Running it
 
 ```bash
 atlas run architectures/a08.yaml corpus/*.pdf
 atlas ask architectures/a08.yaml "which results rest on this dataset?"
 ```
 
-The store is named in the manifest, so `--store` is not needed (and overrides it with a
-jsonl store if given, which is a useful way to compare the two).
+The store is named in the manifest, so `--store` is not given. It would replace the SQLite
+store with a directory of JSON lines for the run, and a JSON-lines store cannot answer a
+neighbourhood query: `graph_expand_sql` refuses it by name rather than quietly scanning.
 
-## 9. Implementation
+## 10. Implementation
 
 | Part | Where |
 |---|---|
 | The store | `atlas/store/sqlite.py` (`SqliteStore`, `REACH`, `links_among`, `links_touching`) |
+| Vocabulary | `ontologies/science_core_ql.ttl`, `ontologies/scierc_ql.ttl` |
+| Engine | `atlas/reason/ql.py` (`rewrite`, `to_sql`, `relations`); `atlas/steps/query.py`; `SqliteStore.select` |
 | Relational retrieval | `atlas/steps/graph_sql.py` |
 | Shared packaging | `atlas/steps/graph_expand.py` (`expand`, with a supplied adjacency) |
 | Manifest | `architectures/a08.yaml` |
-| Tests | `tests/test_sqlite_store.py`, `tests/test_graph_sql.py` |
+| Tests | `tests/test_sqlite_store.py`, `tests/test_graph_sql.py`, `tests/test_ql.py`, `tests/test_query.py` |

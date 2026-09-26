@@ -56,9 +56,9 @@ class SalienceOptions(Frozen):
     """What to look for, and what a kept region becomes.
 
     `categories` has no default because a default would be a vocabulary, and this
-    package holds none. `type` and `field` name a type of the loaded pack and one of
+    package holds none. `type` and `field` name a type of the loaded ontology and one of
     its fields, so a kept region is an ordinary node of an ordinary type: it is
-    validated, bound to a span and asserted like everything else, and a pack that does
+    validated, bound to a span and asserted like everything else, and an ontology that does
     not declare the type refuses the whole pass at `validate` rather than here.
     """
 

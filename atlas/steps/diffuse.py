@@ -36,7 +36,8 @@ from pydantic import Field
 
 from atlas.model import Frozen
 from atlas.steps import State, register
-from atlas.steps.graph_expand import GraphExpandOptions, expand
+from atlas.steps.entail import mark
+from atlas.steps.graph_expand import GraphExpandOptions, expand, widened
 from atlas.steps.retrieve import Hit
 from atlas.walk import Adjacency, Walk, walks, weights
 
@@ -85,7 +86,10 @@ def diffuse(state: State, options: DiffuseOptions) -> State:
     """Spread relevance from the ranked nodes, and package what it reached with its routes."""
     store = state["store"]
     hits: tuple[Hit, ...] = state["hits"]
-    adjacency = Adjacency.of(store.links(), options.expand.follow)
+    schema = state.get("schema")
+    walked = widened(options.expand, schema) if schema is not None else options.expand
+    derived = tuple(state.get("derived", ()))
+    adjacency = Adjacency.of([*store.links(), *derived], walked.follow)
     seeds = _seeds(hits)
     scores = pagerank(adjacency, seeds, damping=options.damping, rounds=options.rounds,
                       by_predicate=options.weights)
@@ -98,7 +102,7 @@ def diffuse(state: State, options: DiffuseOptions) -> State:
     bundle = expand(
         store,
         [one.node_id for one in ranked],
-        options.expand,
+        walked,
         reasons={
             one.node_id: (f"diffusion {one.score:.4f}"
                           + ("" if one.explained else ", with no route from a seed"))
@@ -108,7 +112,7 @@ def diffuse(state: State, options: DiffuseOptions) -> State:
         method="diffuse",
         adjacency=adjacency,
     )
-    return {"bundle": bundle, "ranked": ranked}
+    return {"bundle": mark(bundle, derived, state.get("typings", ())), "ranked": ranked}
 
 
 def pagerank(

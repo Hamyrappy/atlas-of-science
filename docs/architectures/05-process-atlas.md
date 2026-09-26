@@ -32,32 +32,65 @@ that is a large fraction of the results, and the architecture is working correct
 it says so. A version of this that guessed the missing conditions would produce a much
 better-looking table and would be worthless.
 
-It also does not treat a protocol and a run of it as one thing. `packs/process.yaml`
+It also does not treat a protocol and a run of it as one thing. `ontologies/process.ttl`
 declares `Protocol`/`ProtocolStep` as information and `Experiment`/`ExecutionStep` as
 occurrents, and `science_core` declares those two disjoint, so "a file of instructions
-was classified as a performed experiment" is an axiom violation a formal check catches
-rather than a subtlety somebody has to notice.
+was classified as a performed experiment" is a clash the RL engine reports with both
+premises rather than a subtlety somebody has to notice.
 
 ## 3. The five questions
 
 | | |
 |---|---|
-| **Schema** | `science_core` (claim, position, evidence line, result, conditions, computation) + `process` (protocol, steps, run, condition, positive and negative result). REPRODUCE-ME identities from the archived snapshot the catalogue cites; OBI, BFO, IAO and EVI identities from their own publications. |
-| **Reasoner** | None at query time. What is checked is mechanical: step alignment, condition agreement, dependency closure. Disjointness between plan and run is available to `formal_check` (architecture 15). |
+| **Schema** | `process_rl`, which imports `process` and `science_core_rl` and through them the base `science_core`, under `profile: RL`, with the shapes `science_core` and `process`. REPRODUCE-ME identities from the archived snapshot the catalogue cites; OBI, BFO, IAO and EVI identities from their own publications. |
+| **Reasoner** | OWL 2 RL over the data (`entail`), in the build chain before `align` and in the ask chain before the walk: the property chains that carry an experiment's conditions and plan to its results and runs, with their derivations. SHACL (`shacl_validate`) before `assert`. What `align`, `compare` and `lineage` then compute is mechanical. |
 | **Data** | Nodes, links and assertions in the store; comparisons and closures computed per question and never asserted. |
 | **Components and reuse** | REPRODUCE-ME (archived snapshot), OBI, IAO, SIO, EVI; `atlas.walk` for the closure; `similarity` from the induction module for the shallow step matcher. |
 | **Evolution** | A failed reproduction does not lower a score. It produces a comparison naming the condition that differs, which is a candidate for a new qualifier in the profile — and a proposal, reviewed, like any other schema change. |
 
-## 4. Pipeline
+## 4. The ontology and the engine
 
-### 4.1 Build
+The questions this architecture exists for — *under which conditions*, *where did the run
+depart from the plan* — are about relations nobody states directly. A paper says the
+experiment ran at 20 °C and that the experiment yielded a result; it rarely says the
+result was obtained at 20 °C. So the engine is **OWL 2 RL** over the data, and the process
+ontology's RL module says what follows:
+
+```turtle
+proc:obtainedUnder owl:propertyChainAxiom ( [ owl:inverseOf proc:yielded ] proc:underCondition ) .
+proc:plannedFor    owl:propertyChainAxiom ( proc:follows proc:plannedStep ) .
+```
+
+and the base module declares `obtained_under` a kind of `observed_under`. `entail` runs
+the chain (`prp-spo2`) over what was extracted; every `obtained_under` link it derives
+relates a result and a condition that were both already there, stands on the quotes of
+the two links it came from, and is marked derived. `compare` then reads the graph as the
+ontology makes it — the stored links and the derived ones, and every relation the ontology
+puts under `observed_under` — so two results are compared on the conditions of the runs
+that yielded them, and the answer can still say which of those relations nobody claimed.
+`align` reads `planned_for` the same way. The chain goes through relations the extractor
+asserts, so nothing is invented: a run whose condition nobody recorded still leaves its
+result `insufficient`.
+
+RL also turns two axioms into findings: plan and run are disjoint classes (information
+against occurrent), and `directly_depends_on` is asymmetric, so a protocol recorded as a
+performed experiment, or two computations recorded as consuming each other's output, are
+**clashes** reported with both premises. A longer dependency cycle is not expressible as an
+OWL 2 axiom on a transitive relation, which is why the `science_core` shapes check it in
+closed world, with SHACL-SPARQL, before anything is asserted; the `process` shapes add a
+warning on a result with no conditions recorded at all, and refuse a run recorded as
+following two procedures.
+
+## 5. Pipeline
+
+### 5.1 Build
 
 ```
-ingest_pdf → extract_llm → relocate → validate → relate_llm → relate → assert
-           → align → index_nodes
+ingest_pdf → extract_llm → relocate → validate → relate_llm → relate → shacl_validate
+           → assert → entail → align → index_nodes
 ```
 
-Extraction is the ordinary chain: the pack offers protocols, steps, runs, conditions and
+Extraction is the ordinary chain: the ontology offers protocols, steps, runs, conditions and
 results, and the model fills them against quotes it must supply verbatim.
 
 `align` is the step specific to this architecture. It reads the two step lists out of
@@ -80,10 +113,10 @@ A renamed step is reported rather than quietly matched, because "the procedure s
 washing and the run says rinsing" is exactly the kind of difference that turns out to
 matter.
 
-### 4.2 Ask
+### 5.2 Ask
 
 ```
-index_nodes → retrieve → graph_expand → compare → graph_answer
+index_nodes → retrieve → entail → graph_expand_entailed → compare → graph_answer
 ```
 
 `compare` sorts the results of the evidence package against the first of them:
@@ -105,7 +138,7 @@ Three rules make this honest:
    unit the value started in. A unit pair the configuration did not declare makes the
    pair incomparable rather than assumed equal.
 
-### 4.3 What a retraction reaches
+### 5.3 What a retraction reaches
 
 `lineage` is not in the ask chain because it answers a different question, on demand:
 
@@ -125,14 +158,14 @@ can act on per item.
 
 The relations are followed **against** the direction they are written in, because a
 dependency relation points from the dependent thing to what it depends on, and the
-question runs the other way. A pack that writes them the other way round sets
+question runs the other way. An ontology that writes them the other way round sets
 `upstream: false`.
 
 Nothing is retracted, marked or superseded. Writing is asserting: deciding a conclusion
 is now in question is a judgement somebody records, and this step produces the list that
 judgement has to consider.
 
-## 5. What is stored
+## 6. What is stored
 
 Beyond the shared argument layer:
 
@@ -147,16 +180,18 @@ unanswerable by every query that finds results. As subclasses, negative results 
 found by every search, ranked by every ranking, and pulled into every evidence package,
 without a single special case anywhere.
 
-## 6. Graph retrieval, exactly
+## 7. Graph retrieval, exactly
 
 ```
 question
   → rank nodes by term overlap → roots
-  → graph_expand: depth 3, budget 60, supports=[supports], opposes=[disputes]
+  → entail: the RL closure, obtained_under and planned_for among what it derives
+  → graph_expand_entailed: depth 3, budget 60, supports=[supports], opposes=[disputes]
       objections pulled in after the walk whatever the budget did
   → compare: results of the package, against the first
       conditions gathered from the result's own fields and from what
-        `observed_under` / `under_condition` reaches
+        `observed_under` / `under_condition` reaches, widened to every relation the
+        ontology puts under them, stored or derived
       conversions applied only where declared, carrying the factor
       verdict per result, with the condition it was excluded on
   → graph_answer: entries, relations with direction, both sides named
@@ -165,7 +200,7 @@ question
 The depth is 3 rather than 2 because the chain this architecture reasons over is longer:
 claim → position → line of argument → result → conditions.
 
-## 7. Evolution, with the case it was built for
+## 8. Evolution, with the case it was built for
 
 A new report finds no effect, and mentions a preparation step the earlier work does not
 describe. The wrong response is to lower a score on the original claim. The right one,
@@ -180,7 +215,7 @@ and the one the pipeline supports:
 4. Until then, the explanation of the difference is a `Statement` with its own evidence,
    not an axiom.
 
-## 8. Competency questions
+## 9. Competency questions
 
 | Question | The path | Why the process layer is needed |
 |---|---|---|
@@ -189,7 +224,7 @@ and the one the pipeline supports:
 | Where does the run depart from the procedure? | `align` over `ProtocolStep` and `ExecutionStep` | Plan and run have separate identities |
 | Which conclusions rest on this dataset? | `lineage` over `derived_from`, `used_dataset`, `rests_on` | The closure returns chains, not a set |
 
-## 9. Risks and acceptance
+## 10. Risks and acceptance
 
 - **Papers do not report process.** Most comparisons will come back `insufficient`. That
   is the finding, not a failure; the metric to watch is how often a condition is
@@ -205,20 +240,21 @@ Acceptance: build a pair of results with near-identical text and different condi
 If the system reports them as comparable, the architecture has not been implemented,
 whatever the rest of it does.
 
-## 10. Running it
+## 11. Running it
 
 ```bash
 atlas run architectures/a05.yaml corpus/*.pdf --store store/
 atlas ask architectures/a05.yaml "under which conditions does the yield rise?" --store store/
 ```
 
-## 11. Implementation
+## 12. Implementation
 
 | Part | Where |
 |---|---|
-| Vocabulary | `packs/science_core.yaml`, `packs/process.yaml` |
+| Vocabulary | `ontologies/process.ttl`, `ontologies/process_rl.ttl`, `ontologies/science_core_rl.ttl`; shapes `ontologies/shapes/science_core.ttl`, `ontologies/shapes/process.ttl` |
+| Engine | `atlas/reason/rl.py`, `atlas/steps/entail.py` (`implied`, `widen`); `atlas/steps/shacl_validate.py` |
 | Plan against run | `atlas/steps/align.py` |
 | Comparability and units | `atlas/steps/compare.py` (`compare`, `convert`, `Conversion`) |
 | What a retraction reaches | `atlas/steps/lineage.py` |
 | Manifest | `architectures/a05.yaml` |
-| Tests | `tests/test_align.py`, `tests/test_compare.py`, `tests/test_lineage.py` |
+| Tests | `tests/test_align.py`, `tests/test_compare.py` (a condition the chain carries), `tests/test_lineage.py`, `tests/test_rl.py`, `tests/test_shacl.py` |

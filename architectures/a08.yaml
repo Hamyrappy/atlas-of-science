@@ -20,7 +20,9 @@ variant:
     link table from the seeds to a bounded depth inside the database, in both
     directions, with `UNION` terminating cycles. `graph_expand_sql` builds the package
     from that neighbourhood, and fetches the objections that touch it in a second query
-    -- the relations a bounded walk would otherwise lose.
+    -- the relations a bounded walk would otherwise lose. The ontology rewrites the
+    relations named before any SQL is written, so a sub-relation or an inverse of one is
+    fetched without being spelled.
   family: relational traversal
   optimises: answering from a large store without reading it
   cost: >-
@@ -38,9 +40,16 @@ variant:
       vocabulary, executed by a query planner.
     a07: >-
       One route, executed well, rather than three routes over one canonical graph.
+  reasoning: >-
+    OWL 2 QL, the profile made for a relational engine: the ontology rewrites what
+    is asked for -- every relation it puts under a named one, every inverse -- before
+    the SQL is written, and the database answers plain joins without knowing an ontology
+    exists. Nothing is materialised; a row that is not stored is not an answer.
   spec: docs/architectures/08-relational.md
 
-schema: [science_core, scierc]
+schema:
+  ontologies: [science_core_ql, scierc_ql]
+  profile: QL
 
 store: {sqlite: {path: store/atlas.db}}
 

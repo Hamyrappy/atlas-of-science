@@ -31,6 +31,7 @@ from pydantic import Field
 
 from atlas.model import Frozen, Node
 from atlas.steps import State, register
+from atlas.steps.entail import implied, widen
 from atlas.walk import LIMIT, Adjacency, Walk, reach
 
 DEPTH = 6
@@ -55,7 +56,7 @@ class Affected(Frozen):
 class LineageOptions(Frozen):
     """Which relations carry dependency, how far to follow them, and which way they point.
 
-    `follow` is the pack's own predicates -- what a result was derived from, what a
+    `follow` is the ontology's own predicates -- what a result was derived from, what a
     computation read, what it ran. `upstream` says the relations point from the
     dependent thing to what it depends on, which is how they are usually written: the
     walk then runs against them, from the cause to what stands on it.
@@ -74,7 +75,7 @@ def lineage(state: State, options: LineageOptions) -> State:
     store = state["store"]
     causes = state["cause"]
     causes = (causes,) if isinstance(causes, str) else tuple(causes)
-    adjacency = Adjacency.of(store.links(), options.follow)
+    adjacency = Adjacency.of(implied(state), widen(state, options.follow))
     # The relations point from the dependent thing to what it depends on, so reaching
     # what depends on the cause means walking them backwards.
     found = reach(adjacency, causes, depth=options.depth, limit=options.limit,

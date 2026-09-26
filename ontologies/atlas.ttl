@@ -1,0 +1,86 @@
+# The substrate's own vocabulary: how Atlas of Science writes itself down in RDF.
+#
+# Two kinds of term live here, and neither is ever part of a schema's vocabulary.
+#
+# Annotation properties an ontology uses to tell a configuration what OWL has no word
+# for -- the name a term is typed as, the ordered fields of a class, which field labels it,
+# which profile a module is written for. OWL reasoners ignore annotation properties by
+# definition, so using them changes nothing about what an ontology means.
+#
+# The RDF shape of the metamodel: a node is an individual typed by its class; a link is
+# a triple between two such individuals, reified so that it can carry its own evidence; a
+# span is a W3C Web Annotation selector on a source. This is what the SHACL engine
+# validates and what `atlas.ontology.abox` writes. These are `rdfs:Class`, not
+# `owl:Class`, precisely so that loading this file adds no type to anybody's vocabulary.
+
+@prefix atlas: <https://w3id.org/atlas-of-science/substrate#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix oa:    <http://www.w3.org/ns/oa#> .
+@prefix prov:  <http://www.w3.org/ns/prov#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+
+<https://w3id.org/atlas-of-science/substrate>
+    a owl:Ontology ;
+    rdfs:label "Atlas of Science substrate vocabulary" ;
+    owl:versionIRI <https://w3id.org/atlas-of-science/substrate/0.2> .
+
+# ---- what an ontology tells a configuration ---------------------------------------------
+
+atlas:name a owl:AnnotationProperty ;
+    skos:definition "The word a configuration, a prompt and a node's type use for a term. The IRI is its identity; this is what a person types." .
+
+atlas:fields a owl:AnnotationProperty ;
+    skos:definition "The ordered list of datatype properties an instance of a class records. Not rdfs:domain, which in OWL infers membership rather than declaring a record." .
+
+atlas:labelField a owl:AnnotationProperty ;
+    skos:definition "Which of a class's fields names the thing for a reader." .
+
+atlas:datatype a owl:AnnotationProperty ;
+    skos:definition "The datatype a legacy pack gave a field, kept as it was written." .
+
+atlas:mappings a owl:AnnotationProperty ;
+    skos:definition "Free-text correspondences a legacy pack recorded, kept in order." .
+
+atlas:characteristic a owl:AnnotationProperty ;
+    skos:definition "A characteristic a legacy pack declared that OWL 2 does not have, kept so the formal gate can refuse it by name." .
+
+atlas:profile a owl:AnnotationProperty ;
+    skos:definition "On an ontology: an OWL 2 profile (RDFS, EL, QL, RL, DL) the module is written to stay within, together with everything it imports." .
+
+atlas:inferred a owl:AnnotationProperty ;
+    rdfs:range xsd:boolean ;
+    skos:definition "On a class: its members are whatever the axioms make them. An engine infers them; an extractor is never offered the class." .
+
+atlas:status a owl:AnnotationProperty ;
+    skos:definition "Whether a term is core, local to one corpus, or a candidate nobody has accepted yet." .
+
+# ---- the metamodel as RDF ----------------------------------------------------------------
+
+atlas:Node a rdfs:Class ;
+    skos:definition "A typed thing located in a source. Its rdf:type is its class." .
+
+atlas:Link a rdfs:Class ;
+    rdfs:subClassOf rdf:Statement ;
+    skos:definition "A typed relation between two nodes, reified so it can carry its own evidence." .
+
+atlas:Span a rdfs:Class ;
+    rdfs:subClassOf oa:SpecificResource ;
+    skos:definition "A verbatim region of a source: a text position and the exact quote at it." .
+
+atlas:evidence a rdf:Property ;
+    rdfs:range atlas:Span ;
+    skos:definition "The span a node or a link stands on. No provenance, no node." .
+
+atlas:segment a rdf:Property ;
+    rdfs:range xsd:integer ;
+    skos:definition "Which segment of the source the span's offsets are counted in." .
+
+atlas:schemaVersion a rdf:Property ;
+    skos:definition "The content hash of the ontology the object was written under." .
+
+atlas:derivedBy a rdf:Property ;
+    skos:definition "On a derived link: the rule that derived it. A derived link was claimed by nobody." ;
+    rdfs:subPropertyOf prov:wasDerivedFrom .

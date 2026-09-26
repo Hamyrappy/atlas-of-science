@@ -91,11 +91,12 @@ def test_a_relation_naming_a_type_that_does_not_exist_is_reported() -> None:
     assert [one.kind for one in report.problems] == ["unknown-range"]
 
 
-def test_a_characteristic_this_library_cannot_execute_is_reported() -> None:
+def test_a_characteristic_owl_does_not_have_is_reported() -> None:
+    """All seven of OWL 2's are accepted now; a word that is none of them is not."""
     report = inspect(schema(
         TypeDef(name="Thing"),
         predicates=(PredicateDef(name="r", domain="Thing", range="Thing",
-                                 characteristics=("reflexive",)),),
+                                 characteristics=("circular",)),),
     ))
 
     assert [one.kind for one in report.problems] == ["unknown-characteristic"]
@@ -164,3 +165,27 @@ def test_a_pack_that_passes_leaves_a_report_saying_what_was_checked() -> None:
     assert result["formal"].passed
     assert result["formal"].checked == CHECKS
     assert result["problems"] == ()
+
+
+UNION = """
+@prefix ex:   <https://example.org/u#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<https://example.org/u> a owl:Ontology .
+ex:A a owl:Class ; rdfs:subClassOf [ a owl:Class ; owl:unionOf ( ex:B ex:C ) ] .
+ex:B a owl:Class ; owl:disjointWith ex:A .
+ex:C a owl:Class ; owl:disjointWith ex:A .
+"""
+
+
+def test_a_class_only_a_union_makes_empty_fails_the_dl_gate_and_not_the_el_one() -> None:
+    """The EL engine reads the EL part and misses what a union implies; the tableau does not."""
+    from atlas.ontology import load_text
+
+    schema = load_text(UNION)
+
+    assert inspect(schema, engine="el").passed
+    found = inspect(schema, engine="dl")
+    assert not found.passed
+    assert ("unsatisfiable", "A") in {(one.kind, one.term) for one in found.problems}

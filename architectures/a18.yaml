@@ -43,9 +43,16 @@ variant:
     a16: >-
       No budget and no prizes: where the walk settles is the answer, rather than what a
       region is worth.
+  reasoning: >-
+    OWL 2 RL before the diffusion, so relevance spreads over the graph as the
+    ontology makes it -- a transitive part-of, an inverse, a chain from a result to the
+    data it was computed from -- and every derived edge a walk crosses is marked as
+    inference in the package, never as something a source said.
   spec: docs/architectures/18-associative-memory.md
 
-schema: [science_core, scierc]
+schema:
+  ontologies: [science_core_rl, scierc_rl]
+  profile: RL
 
 steps:
   - ingest_pdf
@@ -60,6 +67,7 @@ steps:
 ask:
   - index_nodes
   - retrieve
+  - entail
   - diffuse:
       damping: 0.85
       rounds: 30

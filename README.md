@@ -3,6 +3,7 @@
 A substrate for machine-readable markup: a corpus is read once and turned into typed things, each
 bound to a verbatim fragment of its source, under whatever ontology you plug in.
 
+How it is put together, in pictures: [`docs/overview.md`](docs/overview.md) ·
 Project page: [`index.html`](index.html) · Russian overview: [`docs/initiative.ru.md`](docs/initiative.ru.md)
 
 ## Why
@@ -16,10 +17,16 @@ text, typed against an ontology and stored with the fragment they came from. Dow
 query that instead of the texts, which makes the expensive pass a fixed cost rather than a
 recurring one.
 
-Which types exist is not the library's business. The core carries six concepts and no domain
-vocabulary at all; the types, fields and predicates arrive at run time from packs of YAML, and the
-steps that produce them are named in a configuration file rather than wired into the code. Reading
-a different field, or reading papers differently, is a pack and a configuration, not a fork.
+Which classes exist is not the library's business. The core carries six concepts and no domain
+vocabulary at all; the classes, fields and relations arrive at run time from an **OWL 2 ontology**,
+and the steps that produce them are named in a configuration file rather than wired into the code.
+Reading a different field, or reading papers differently, is an ontology and a configuration, not a
+fork.
+
+The ontology is not a list of labels. It is reasoned over: an engine for each OWL 2 profile works
+out what the axioms imply about what was extracted — every consequence with its derivation, every
+contradiction with the two claims behind it — and SHACL checks what a record must carry, in closed
+world, where OWL cannot.
 
 A node is worth querying only because it carries the fragment it came from. Every span stores the
 exact substring together with the offsets it was taken at, so any statement in the markup can be
@@ -30,7 +37,7 @@ detectable instead of silently wrong.
 L4  field map   portfolios of work, drift of topics
 L3  topic       a cluster of related sources
 L2  source      one document, read once
-L1  node        a typed thing, of whichever types the loaded pack declares
+L1  node        a typed thing, of whichever classes the loaded ontology declares
 L0  span        a verbatim fragment of the source
 ```
 
@@ -47,8 +54,9 @@ Six concepts, and nothing of any domain:
 - **Link** — a typed relation between nodes, itself an object with its own id, fields and evidence.
 - **Assertion** — who asserted what, when, on what evidence, and what it supersedes. This is the
   unit of writing: nodes and links are the projection of a history, not rows to be updated.
-- **Schema** — the ontology plugged in underneath: types, fields and predicates, each with an IRI
-  and optional mappings to public vocabularies.
+- **Schema** — the ontology plugged in underneath: its OWL 2 axioms, the classes, fields and
+  relations they project, each with an IRI and mappings to public vocabularies, and the class
+  hierarchy a reasoner computed from them.
 
 ## Install
 
@@ -72,7 +80,7 @@ counted for it and whether it came from the cache, so a caller can report both.
 $ export ATLAS_BASE_URL=https://api.example.com/v1 ATLAS_MODEL=your-model ATLAS_API_KEY=secret
 
 $ atlas init corpus/
-corpus/pack.yaml
+corpus/ontology.ttl
 corpus/pipeline.yaml
 corpus/questions.yaml
 corpus/README.md
@@ -84,11 +92,11 @@ $ head -n 1 corpus/store/assertions.jsonl
 {"id":"8c5c97324ba55420","agent":{"id":"run:2026-09-13T10:15:00+00:00","kind":"run","label":""},"at":"2026-09-13T10:15:00+00:00","target":{"id":"b3a1c4696f1af143","spans":[{"source_id":"3a750328a5e6","segment":1,"start":0,"end":54,"text":"Our model improves F1 by 3.4 points over the baseline."}],"schema_version":"2775c3049803","type":"Result","fields":{"statement":"Our model improves F1 by 3.4 points over the baseline."}},"supersedes":null,"confidence":null}
 ```
 
-`init` writes a pack to fill in, a configuration naming it, a questions file and a note; edit the
-pack and the run is about your domain. `run` prints one line: every count the steps it was
+`init` writes an ontology to fill in (OWL 2 in Turtle, which Protégé opens), a configuration naming
+it, a questions file and a note; edit the ontology and the run is about your domain. `run` prints one line: every count the steps it was
 configured with left behind — how many statements the model offered, what they were charged, how
 many were refused because their quote could not be located, how many landed through a relaxed
-search and are worth a look, how many the pack rejected, and how many assertions were written —
+search and are worth a look, how many the ontology rejected, and how many assertions were written —
 then where the pass was written and what the store recorded it took. The configuration names the
 store, and `--store dir` overrides it for one run. The store is append-only, so a second run lands
 under what is already recorded rather than replacing it.
@@ -97,13 +105,22 @@ under what is already recorded rather than replacing it.
 from a relative name to the text to write there: an application whose corpora have a shape of their
 own hands in that shape instead of writing its own `init`.
 
-To read a corpus under the six machine-learning types this project started with, name the pack
-that still holds them. A pack is looked for beside the configuration that named it, then under the
-working directory, then among the packs the wheel ships, so a bare name is enough for that last one:
+To read a corpus under the six machine-learning classes this project started with, name the
+ontology that holds them. An ontology is looked for beside the configuration that named it, then
+under the working directory, then among the ontologies the wheel ships, so a bare name is enough for
+that last one. The mapping form also names the OWL 2 profile the ontology must stay within and the
+SHACL shapes records are held to:
 
 ```yaml
-schema: ml_paper        # or a path: packs/ml_paper.yaml, ../shared/pack.yaml
+schema: ml_paper        # or a path: ../shared/ontology.ttl
+
+schema:
+  ontologies: [science_core_rl, scierc_rl]
+  profile: RL
+  shapes: [science_core]
 ```
+
+A legacy YAML pack still loads, into the same OWL layer; `docs/ontology.md` says how.
 
 ## Use it as a library
 
@@ -119,7 +136,7 @@ from atlas.steps.ingest_pdf import read_pdf
 from atlas.steps.relocate import locate
 from atlas.store import open_store
 
-schema = load(Path("pack.yaml"))
+schema = load(Path("ontology.ttl"))
 source = read_pdf(Path("paper.pdf"))
 store = open_store({"jsonl": {"dir": "store"}})   # or "memory"; a store of your own registers too
 store.add_source(source)
@@ -127,12 +144,12 @@ store.add_source(source)
 match = locate(source, quote, segment)           # a quote becomes a verified span, or None
 node = Node(
     id="n1",
-    type="Observation",                          # a type your pack declares, not one of ours
+    type="Observation",                          # a class your ontology declares, not one of ours
     fields={"summary": quote[:40]},
     spans=(match.span,),
     schema_version=schema.version,
 )
-assert schema.validate_node(node) == []          # violations, empty when the node fits the pack
+assert schema.validate_node(node) == []          # violations, empty when the node fits the ontology
 
 store.assert_(
     Assertion(
@@ -172,7 +189,8 @@ and the state; `pipeline.initial(inputs, **context)` is the state a run starts f
 `pipeline.run_state(state)` runs the same configured chain over a state you built yourself — a
 question, a store, a client — which is the shape a request has. `pipeline.steps` keeps the
 configured name of each step beside its options, and `pipeline.meta` holds every key of the
-configuration file other than the four it reserves: `schema`, `store`, `imports` and `steps`.
+configuration file other than the five it reserves: `schema`, `store`, `imports`, `steps` and
+`ask`.
 
 Registering a step of your own needs no fork: write the function, decorate it with
 `@register("my_step", requires=("sources",), produces=("my_key",))`, and name the module under
@@ -209,42 +227,74 @@ not name and none is ever swallowed. The default lives in the model and nowhere 
 and the function cannot disagree about it. `docs/architecture.md` lists what each shipped step
 takes.
 
+The engines are libraries too, for a caller that wants to ask the ontology something without a
+pipeline around it:
+
+```python
+from atlas.ontology import load
+from atlas.reason.ql import parse, rewrite, tbox
+from atlas.steps.classify import by_el
+
+schema = load("science_core_el", "semantic_units", profile="EL")
+schema.is_a("SupportingLine", "EvidenceLine")        # True: a definition puts it there
+by_el(schema).unsatisfiable                          # (): every class can have a member
+
+schema = load("science_core_ql", profile="QL")
+for query in rewrite(parse("q(?line, ?claim) :- bears_on(?line, ?claim)"),
+                     tbox(schema.every_axiom())):
+    print(query.text())                              # bears_on, supports, disputes
+```
+
+`atlas.reason.rl.reason` closes a set of facts under the OWL 2 RL rules and returns each derived
+fact with its derivation; `atlas.reason.tableau.decide` asks the DL tableau whether an ontology has
+a model and which classes can have none; `atlas.reason.shacl.validate` checks nodes and links
+against the shapes in closed world. `docs/ontology.md` says which runs over what, and why.
+
 ## Layout
 
 ```
 atlas/
-  model/             the metamodel: source, span, node, link, assertion, schema
-  ontology/          reading packs off disk and merging them into one schema
+  model/             the metamodel: source, span, node, link, assertion, schema, and the
+                     OWL 2 structural model a schema's axioms are written in
+  ontology/          reading ontologies (Turtle, RDF/XML, JSON-LD, legacy YAML packs) into
+                     one classified schema, and writing a schema or a store back out as RDF
+  reason/            the engines: RDFS and OWL 2 RL over data, EL and a DL tableau over the
+                     ontology, QL query rewriting, SHACL, and the profile checker
   text.py            folding, normalising and tokenising, shared by relocation and indexing
   walk.py            one ruling on what a neighbour is, and what a path is
   store/             the append-only log -- in memory, as JSON lines, in SQLite -- and the
                      projections over it
-  steps/             forty-five of them: ingest, extraction, relocation, relation,
-                     validation, critique and repair, induction, entailment, recording,
-                     indexing, seven ways of selecting an evidence package, answering
+  steps/             ingest, extraction, relocation, relation, validation (by schema and by
+                     SHACL), critique and repair, induction, reasoning, recording, indexing,
+                     seven ways of selecting an evidence package, answering
   catalogue.py       the architectures on offer, read off their manifests
   pipeline.py        a configuration of step names run in order over one dict of state
   scaffold.py        the project skeleton `atlas init` writes
   llm.py             the chat client, with a disk cache in front of it
   cli.py             run, ask, init and variants
-architectures/       one manifest per architecture: the packs, the chain that builds, the
-                     chain that answers, and why anyone would choose it
-packs/
-  science_core.yaml  the argument: claim, position, evidence line, result, conditions,
-                     computation -- with ECO, BFO, IAO, OBI, SIO and EVI identities
-  process.yaml       plan against run, conditions, positive and negative results
-  science_map.yaml   the topic layer, which is deliberately not a taxonomy
-  semantic_units.yaml  the form of a claim: kind, quantifier, polarity, modality
-  scierc.yaml        a local versioned profile of the SciERC annotation scheme
-  ml_paper.yaml      one domain's ontology: six node types and eight predicates
-  README.md          what a pack is and how to write one
-                     (shipped in the wheel; `atlas.ontology.builtin("ml_paper")` is its path)
-pipeline.yaml        the default run over that pack
+architectures/       one manifest per architecture: the ontologies and their profile, the
+                     chain that builds, the chain that answers, and why anyone would choose it
+ontologies/          OWL 2 in Turtle, shipped in the wheel (`atlas.ontology.builtin(name)`)
+  science_core*.ttl  the argument: claim, position, line of evidence, result, conditions,
+                     computation, with BFO, IAO, OBI, ECO, SIO and EVI identities; a base
+                     module and one module per profile (rl, el, ql, dl)
+  process*.ttl       plan against run, conditions, positive and negative results
+  science_map*.ttl   the topic layer, which is deliberately not a taxonomy
+  semantic_units.ttl the form of a claim: kind, quantifier, polarity, modality, terms
+  scierc*.ttl        a local versioned profile of the SciERC annotation scheme
+  ml_paper.ttl       one domain's ontology: six classes and eight relations, to copy
+  fields.ttl         the datatype properties every class lists as its fields
+  atlas.ttl          the substrate's own vocabulary; never part of a schema
+  shapes/            SHACL: what a record must carry, in closed world
+  README.md          the modules, the profiles, and how to write one
+pipeline.yaml        the default run, over `ml_paper`
 tests/               the suite; no network, no API key, no committed binaries
 docs/
+  overview.md        how the whole thing fits together, in six diagrams
   architecture.md    the metamodel, the step model, the store, the open questions
   architectures/     one specification per architecture, and the rule they all obey
-  ontology.md        what a pack declares, how identity works, how the version is hashed
+  ontology.md        what an ontology holds, how it is loaded, which engine reads which
+                     part of it, what SHACL checks, how the version is hashed
   evaluation.md      the measurement contract: competency questions, seams, negative controls
   initiative.ru.md   the Russian write-up of the initiative
 CLAUDE.md            how to work in this repository: invariants, layout, direction
@@ -254,8 +304,12 @@ index.html           the project page
 
 ## Design
 
-- Nothing under `atlas/` names a type, a field or a predicate of any domain. `tests/test_substrate.py`
+- Nothing under `atlas/` names a class, a field or a relation of any domain. `tests/test_substrate.py`
   runs the shipped steps over an invented ontology and holds that claim to it.
+- Only the engines that cannot invent an individual -- RDFS and OWL 2 RL -- run over extracted
+  data, and every fact they derive carries its derivation and the spans of its premises. EL and DL
+  are asked about the ontology; QL answers a query by rewriting it. None of them materialises
+  anything a source did not say.
 - A step is a function from the run's state to the keys it adds, registered under a name. Replacing
   one is naming a different one in the configuration file.
 - A type that crosses a step boundary lives with the step that defines it, and importing it from
@@ -268,9 +322,9 @@ index.html           the project page
 ## Architectures
 
 An architecture here is a configuration, not a mode or a class: a manifest under
-`architectures/` naming the packs it loads, the chain that builds the graph, the chain that
-answers over it, and the options each step runs under. Nothing in `atlas/` branches on which one
-is in use.
+`architectures/` naming the ontologies it loads and the OWL 2 profile they stay within, the
+chain that builds the graph, the chain that answers over it, the engines those chains run, and
+the options each step runs under. Nothing in `atlas/` branches on which one is in use.
 
 ```bash
 atlas variants                    # what is on offer
@@ -282,7 +336,10 @@ atlas ask architectures/a05.yaml "under which conditions does this hold?" --stor
 Fifteen ship. They differ in three places — what is stored about a claim (5, 8, 12, 13, 14), how
 the vocabulary and the graph come to exist (4, 6, 10, 15), and how the evidence package is
 selected (0, 7, 16, 18, 19, 20) — and they share everything else, which is what makes them
-comparable. Each has a specification in `docs/architectures/` with the same eleven sections.
+comparable. Each reasons with its ontology by the engine for its profile — RDFS for 0; OWL 2 RL
+over the data for 5, 6, 7, 10, 13, 18 and 19; EL classification for 4, 12 and 16; QL rewriting
+into SQL for 8, 14 and 20; the DL tableau for 15 — and each has a specification in
+`docs/architectures/` with a section on the ontology it reasons with and why.
 
 **The rule they all obey: an answer is built from a walked graph.** Ranking finds where to start;
 it does not find an answer. Every `ask` chain builds a `Bundle` and answers from one, an objection
@@ -291,12 +348,15 @@ a gap rather than handed to a model. `tests/test_catalogue.py` checks that over 
 
 ## Status
 
-Working today: the metamodel and its projections; pack loading, merging, identity, relation
-characteristics, disjointness and validation; an append-only store in memory, as JSON lines, and
+Working today: the metamodel and its projections; OWL 2 ontologies in Turtle with a module per
+profile, loaded, merged, classified and held to a profile; engines for RDFS, OWL 2 RL (with the
+derivation of every consequence and every clash), EL classification, QL query rewriting into SQL,
+and an OWL 2 DL tableau; SHACL validation in closed world; legacy YAML packs imported into the same
+layer; an append-only store in memory, as JSON lines, and
 in SQLite with the graph reads pushed into recursive queries; ingest for PDF, plain text, markdown
 and delimited tables; extraction of typed statements and of relations, each bound to a quote the
 library places itself; deterministic critics with a bounded repair and a quarantine; induction of
-what the pack has no word for, with a gate that produces a proposal and never an edit; a formal
+what the ontology has no word for, with a gate that produces a proposal and never an edit; a formal
 gate over the schema; materialised entailment with the derivation of every consequence; seven ways
 of selecting an evidence package, and an answering step whose uncited lines are dropped and whose
 ungrounded packages are refused; the cached model client; `run`, `ask`, `init` and `variants`.

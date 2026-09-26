@@ -41,9 +41,16 @@ variant:
     a18: >-
       The region is chosen by prizes and costs against a budget, not by where a
       diffusion settles.
+  reasoning: >-
+    OWL 2 EL classification, because the selector reads classes and not strings:
+    `whole: [EvidenceLine, Study]` takes an n-ary node entire for every class the
+    classifier puts under those two, including the ones only a definition puts there,
+    and the classification is complete for an EL ontology.
   spec: docs/architectures/16-selected-subgraph.md
 
-schema: [science_core, scierc]
+schema:
+  ontologies: [science_core_el, scierc]
+  profile: EL
 
 steps:
   - ingest_pdf
@@ -57,6 +64,7 @@ steps:
 
 ask:
   - index_nodes
+  - {classify: {engine: el}}
   - retrieve
   - select_subgraph:
       cost: 0.25

@@ -43,7 +43,8 @@ from pydantic import Field
 
 from atlas.model import Frozen
 from atlas.steps import State, register
-from atlas.steps.graph_expand import Bundle, GraphExpandOptions, expand
+from atlas.steps.entail import mark
+from atlas.steps.graph_expand import Bundle, GraphExpandOptions, expand, widened
 from atlas.steps.retrieve import Hit
 from atlas.walk import Adjacency
 
@@ -89,8 +90,12 @@ def select_subgraph(state: State, options: SubgraphOptions) -> State:
     """Grow a small connected region around the best-ranked nodes and package it."""
     store = state["store"]
     hits: tuple[Hit, ...] = state["hits"]
-    links = store.links()
-    adjacency = Adjacency.of(links, options.expand.follow)
+    schema = state.get("schema")
+    walked = widened(options.expand, schema) if schema is not None else options.expand
+    derived = tuple(state.get("derived", ()))
+    options = options.model_copy(update={"expand": walked})
+    links = (*store.links(), *derived)
+    adjacency = Adjacency.of(links, walked.follow)
     whole = _whole(store, adjacency, options)
     prizes = _prizes(hits)
 
@@ -108,7 +113,8 @@ def select_subgraph(state: State, options: SubgraphOptions) -> State:
         adjacency=adjacency,
     )
     bundle, dropped = trim(store, bundle, prizes, options, adjacency)
-    return {"bundle": bundle, "selection": selection.model_copy(update={"trimmed": dropped})}
+    return {"bundle": mark(bundle, derived, state.get("typings", ())),
+            "selection": selection.model_copy(update={"trimmed": dropped})}
 
 
 def grow(

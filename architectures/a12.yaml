@@ -23,7 +23,8 @@ variant:
     whose negation scope nobody recorded can mean either of two opposite things; an
     unstated quantifier is merely lossy. Which kinds, quantifiers and modalities count
     is a run's configuration, and with nothing configured nothing is exact -- the safe
-    direction to fail in. Nothing is filtered out of a package: a unit that may not be
+    direction to fail in. An exact unit becomes an OWL axiom the EL engine checks against
+    the ontology and the other units. Nothing is filtered out of a package: a unit that may not be
     a premise is still what a source said.
   family: semantic-unit traversal
   optimises: not flattening three different kinds of claim into one relation
@@ -43,12 +44,21 @@ variant:
       refused, by name, where it does not.
     a05: >-
       The subject is the content of the claim rather than the work behind it.
+  reasoning: >-
+    OWL 2 EL over the units. An exact universal unit is a terminological axiom --
+    "all S are O" is SubClassOf(S, O) -- and the EL classifier runs over the ontology
+    with every such unit, so universals from two sources that leave a term with no
+    possible member are a contradiction named by the fewest units it needs. An
+    existential unit is checked and never added: adding it would be the engine
+    inventing a member.
   spec: docs/architectures/12-semantic-units.md
 
-schema: [science_core, semantic_units]
+schema:
+  ontologies: [science_core_el, semantic_units]
+  profile: EL
 
 steps:
-  - {formal_check: {strict: true}}
+  - {formal_check: {strict: true, engine: el}}
   - ingest_pdf
   - {extract_llm: {segment: page}}
   - relocate
@@ -66,6 +76,8 @@ ask:
       quantifiers: [some, most, all, none]
       polarities: [affirmative, negative]
       modalities: [assertoric]
+      readings: {all: all, some: some, none: none}
+      negative: [negative]
   - retrieve
   - {graph_expand: {depth: 3, limit: 60, supports: [supports], opposes: [disputes]}}
   - mark_units

@@ -106,7 +106,7 @@ def test_a_symmetric_relation_is_derived_the_other_way_round() -> None:
 
     [derived] = closure.links
     assert (derived.predicate, derived.src, derived.dst) == ("next_to", "e" * 16, "d" * 16)
-    assert closure.derivations[0].rule == "symmetric"
+    assert [one.rule for one in closure.derivations if one.link_id == derived.id] == ["symmetric"]
 
 
 def test_an_inverse_is_derived_from_either_side_of_the_pair() -> None:
@@ -187,8 +187,10 @@ def test_two_derived_links_supporting_each_other_do_not_stand_on_nothing() -> No
     # part_of a->b derives has_part b->a, which derives part_of a->b again. Withdrawing
     # the assertion must take both down rather than leaving the circle standing.
     closure = close([PART_AB], SCHEMA)
+    # The domain and range type both ends too; those stand or fall with the link.
+    derived = {*(one.id for one in closure.links), *(one.fact for one in closure.typings)}
 
-    assert supported(closure, ()) == {"ab", *[one.id for one in closure.links]}
+    assert supported(closure, ()) == {"ab", *derived}
     assert supported(closure, {"ab"}) == set()
 
 

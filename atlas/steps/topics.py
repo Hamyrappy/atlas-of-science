@@ -66,8 +66,8 @@ class TopicsOptions(Frozen):
     """Which relations tie things into a topic, and how small a topic may be.
 
     `follow` empty means every relation: a first map of an unfamiliar corpus. Naming a
-    few is how a run says that only some relations mean "discussed together" -- on a
-    pack where everything hangs off one hub type, following all of them produces one
+    few is how a run says that only some relations mean "discussed together" -- in an
+    ontology where everything hangs off one hub class, following all of them produces one
     topic containing the corpus, which is a true and useless map.
     """
 

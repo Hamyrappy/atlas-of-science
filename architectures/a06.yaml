@@ -42,9 +42,18 @@ variant:
     a20: >-
       The agents improve how knowledge is built; a plan of graph operators improves how
       a question is answered over what was already built.
+  reasoning: >-
+    SHACL is the critic's closed-world half: what a record lacks or holds that it
+    may not, refused with the shape's own message before anything is asserted. OWL 2 RL
+    is the other half: a clash -- a line recorded as both supporting and disputing one
+    proposition, two disjoint SciERC labels on one mention -- is the ontology proving
+    two extracted claims cannot both be true, reported with both premises.
   spec: docs/architectures/06-critic-pipeline.md
 
-schema: [science_core, scierc]
+schema:
+  ontologies: [science_core_rl, scierc_rl]
+  profile: RL
+  shapes: [science_core, critic]
 
 steps:
   - ingest_pdf
@@ -58,13 +67,15 @@ steps:
   - validate
   - {relate_llm: {segment: page}}
   - relate
+  - shacl_validate
   - {assert: {agent: run}}
   - index_nodes
 
 ask:
   - index_nodes
   - retrieve
-  - {graph_expand: {depth: 3, limit: 60, supports: [supports], opposes: [disputes]}}
+  - entail
+  - {graph_expand_entailed: {depth: 3, limit: 60, supports: [supports], opposes: [disputes]}}
   - reconcile:
       supports: [supports]
       opposes: [disputes]

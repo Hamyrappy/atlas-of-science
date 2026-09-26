@@ -3,17 +3,25 @@
 Read this before changing code: what the substrate is, what the metamodel guarantees, how a run is
 assembled, and what is open.
 
-## Three layers, and the line between them
+## Four layers, and the lines between them
 
 The **metamodel** in `atlas/model/` is six types and no domain content: `Source`, `Span`, `Node`,
 `Link`, `Assertion`, `Schema`. It reads no files, loads no configuration and names no type of any
 field. Everything else depends on it, and it depends on nothing.
 
-The **ontology** is data. `atlas/ontology/load(*specs, base=None)` reads packs of YAML and merges
-them into one `Schema`, versioned by the hash of the bytes it read. Which packs are loaded is a
-line in a configuration file, so the vocabulary of a corpus is chosen at run time by the person
-reading it. Each spec is resolved beside the configuration that named it, then under the working
-directory, then among the packs the wheel ships -- `docs/ontology.md` says where and why.
+The **ontology** is data, and it is OWL 2. `atlas/ontology/load(*specs, base=None, profile="",
+shapes=())` reads ontologies -- Turtle, RDF/XML, JSON-LD, or a legacy YAML pack -- into one RDF
+graph, reads that into OWL 2 axioms (`atlas/model/owl.py`) and the vocabulary a configuration
+uses, classifies it with the EL engine, holds it to the profile a configuration names, and versions
+the result by the hash of the bytes it read. Which ontologies are loaded is a line in a
+configuration file, so the vocabulary of a corpus is chosen at run time by the person reading it.
+Each spec is resolved beside the configuration that named it, then under the working directory, then
+among the ontologies the wheel ships -- `docs/ontology.md` says where and why.
+
+The **engines** in `atlas/reason/` reason over it, one per profile: RDFS and OWL 2 RL over the
+data, EL and a DL tableau over the ontology, QL over a query, SHACL over a record in closed world.
+They are libraries, not steps; the steps that run them are named in a configuration like any other.
+The section *Reasoning* below says which runs over what, and why that line is where it is.
 
 The **pipeline** is a list of named steps. A step is a function `step(state, options) -> State`,
 where `State` is `dict[str, Any]` and `options` is the model the step declared, absent when it
@@ -103,7 +111,9 @@ hands back the reply beside the object it parsed, so a step that asks for JSON c
 what it spent: `extract_llm` adds `tokens`, what the calls it actually made were charged, and
 `cached_replies`, how many came off the cache and cost nothing this time.
 
-A **configuration** reserves four keys. `schema` names the packs to load, `store` is opened through
+A **configuration** reserves four keys. `schema` names the ontologies to load -- a name, a list, or a
+mapping `{ontologies, profile, shapes}` that also names the OWL 2 profile they must stay within and
+the SHACL shapes the record is held to -- `store` is opened through
 `atlas.store.open_store`, `imports` is a list of modules imported before the step names are
 resolved -- which is how a configuration names a step that lives outside this tree -- and `steps` is
 the list itself. Every other key belongs to whoever wrote the file and is kept, unread, in
@@ -127,8 +137,9 @@ recoverable from anything else in the state.
 
 ## The steps that ship
 
-Forty-five of them, in seven groups. A group is not a concept in the code -- the registry is
-flat and the pipeline resolves a name -- it is how a reader finds the one they want.
+Forty-eight of them, in eight groups. A group is not a concept in the code -- the registry is
+flat and the pipeline resolves a name -- it is how a reader finds the one they want. The tables are
+generated from the live registry.
 
 **Reading a source.**
 
@@ -155,16 +166,24 @@ flat and the pipeline resolves a name -- it is how a reader finds the one they w
 | `repair_llm` | `nodes`, `findings`, `sources`, `schema`, `client` | `statements`, `quarantined`, `repaired` | `atlas/steps/repair.py` |
 | `assert` | `sources`, `nodes`, `schema`, `at`, `store` | `store`, `assertions`, `agent` | `atlas/steps/record.py` |
 
+**Reasoning with the ontology.**
+
+| Name | Reads from the state | Adds | Module |
+|---|---|---|---|
+| `formal_check` | `schema` | `formal`, `problems` | `atlas/steps/formal_check.py` |
+| `classify` | `schema` | `classification`, `hierarchy`, `unsatisfiable` | `atlas/steps/classify.py` |
+| `shacl_validate` | `nodes`, `schema` | `nodes`, `links`, `shacl_violations`, `shacl_conforms` | `atlas/steps/shacl_validate.py` |
+| `entail` | `store`, `schema` | `derived`, `typings`, `identities`, `clashes`, `derivations`, `closure`, `closure_finished` | `atlas/steps/entail.py` |
+| `compile_units` | `store`, `schema` | `units`, `provable`, `unsupported_units`, `unit_conflicts` | `atlas/steps/units.py` |
+| `query` | `store`, `schema` | `answers`, `rewriting`, `bundle`, `inconsistencies` | `atlas/steps/query.py` |
+
 **Growing the vocabulary.**
 
 | Name | Reads from the state | Adds | Module |
 |---|---|---|---|
 | `induce` | `statements`, `schema`, `sources` | `candidates` | `atlas/steps/induce.py` |
 | `define_llm` | `candidates`, `client` | `candidates`, `defined` | `atlas/steps/define_llm.py` |
-| `promote` | `candidates`, `schema` | `promoted`, `refused`, `proposal` | `atlas/steps/induce.py` |
-| `formal_check` | `schema` | `formal`, `problems` | `atlas/steps/formal_check.py` |
-| `entail` | `store`, `schema` | `derived`, `derivations`, `closure`, `closure_finished` | `atlas/steps/entail.py` |
-| `compile_units` | `store`, `schema` | `units`, `provable`, `unsupported_units` | `atlas/steps/units.py` |
+| `promote` | `candidates`, `schema` | `promoted`, `refused`, `proposal`, `proposal_problems` | `atlas/steps/induce.py` |
 
 **Finding where to start.**
 
@@ -195,11 +214,11 @@ flat and the pipeline resolves a name -- it is how a reader finds the one they w
 
 | Name | Reads from the state | Adds | Module |
 |---|---|---|---|
-| `compare` | `bundle`, `store` | `comparisons`, `comparable` | `atlas/steps/compare.py` |
-| `reconcile` | `bundle`, `store` | `conflicts`, `disagreements` | `atlas/steps/reconcile.py` |
+| `compare` | `bundle`, `store` | `comparisons`, `comparable`, `bundle` | `atlas/steps/compare.py` |
+| `reconcile` | `bundle`, `store` | `conflicts`, `disagreements`, `bundle` | `atlas/steps/reconcile.py` |
 | `lineage` | `store`, `cause` | `affected`, `lineage_partial` | `atlas/steps/lineage.py` |
 | `align` | `store` | `alignment`, `discrepancies` | `atlas/steps/align.py` |
-| `count_independence` | `bundle`, `origins` | `independence` | `atlas/steps/federate.py` |
+| `count_independence` | `bundle`, `origins` | `independence`, `bundle` | `atlas/steps/federate.py` |
 | `federate` | — | `store`, `synced`, `held`, `origins` | `atlas/steps/federate.py` |
 
 **Answering.**
@@ -209,6 +228,7 @@ flat and the pipeline resolves a name -- it is how a reader finds the one they w
 | `answer` | `hits`, `question`, `client`, `schema` | `answer`, `uncited` | `atlas/steps/answer.py` |
 | `graph_answer` | `bundle`, `question`, `client`, `schema` | `answer`, `uncited`, `gap` | `atlas/steps/graph_answer.py` |
 | `check_answer` | `answer`, `bundle` | `review`, `omissions` | `atlas/steps/check_answer.py` |
+
 What each may be given under its name in a configuration, copied from the message the library
 itself prints when an option is wrong -- anything not on this line is refused as the file is read:
 
@@ -218,18 +238,19 @@ itself prints when an option is wrong -- anything not on this line is refused as
 | `answer` | system: str \| None = None |
 | `assert` | agent: Literal['human', 'model', 'run'] = 'run', label: str = '' |
 | `check_answer` | no options |
+| `classify` | engine: Literal['el', 'dl'] = 'el', pairwise_limit: int = 60, strict: bool = False |
 | `communities` | follow: tuple[str, ...] = (), min_size: int = 2, rounds: int = 8, members_in_report: int = 5 |
-| `compare` | type: str, conditions: tuple[str, ...] = (), fields: tuple[str, ...] = ('conditions',), value_field: str = 'value', unit_field: str = 'unit', comparable: tuple[str, ...] = (), units: dict[str, float] = {} |
-| `compile_units` | type: str = 'SemanticUnit', kinds: tuple[str, ...] = (), quantifiers: tuple[str, ...] = (), modalities: tuple[str, ...] = (), polarities: tuple[str, ...] = (), kind_field: str = 'kind', quantifier_field: str = 'quantifier', polarity_field: str = 'polarity', modality_field: str = 'modality', scope_field: str = 'scope', expression_field: str = 'expression' |
+| `compare` | type: str, conditions: tuple[str, ...] = (), fields: tuple[str, ...] = ('conditions',), own: bool = True, value_field: str = 'value', unit_field: str = 'unit', comparable: tuple[str, ...] = (), units: dict[str, float] = {} |
+| `compile_units` | type: str = 'SemanticUnit', kinds: tuple[str, ...] = (), quantifiers: tuple[str, ...] = (), modalities: tuple[str, ...] = (), polarities: tuple[str, ...] = (), kind_field: str = 'kind', quantifier_field: str = 'quantifier', polarity_field: str = 'polarity', modality_field: str = 'modality', scope_field: str = 'scope', expression_field: str = 'expression', subject_field: str = 'subject_term', object_field: str = 'object_term', readings: dict[str, Literal['all', 'some', 'none']] = {}, negative: tuple[str, ...] = (), reason: bool = True, explain_limit: int = 200 |
 | `count_independence` | no options |
 | `critique` | negations: tuple[str, ...] = (), min_quote: int = 12, grounded_fields: tuple[str, ...] = () |
 | `define_llm` | redefine: bool = False |
 | `diffuse` | damping: float = 0.85, rounds: int = 30, limit: int = 12, depth: int = 3, weights: dict[str, float] = {}, expand: GraphExpandOptions = GraphExpandOptions(depth=2, limit=60, follow=(), supports=(), opposes=()) |
-| `entail` | premises: tuple[str, ...] = (), rounds: int = 8, assert_derived: bool = False |
-| `execute_plan` | plan: tuple[atlas.steps.plan.Operator, ...] = (), limit: int = 500, expand: GraphExpandOptions = GraphExpandOptions(depth=2, limit=60, follow=(), supports=(), opposes=()) |
+| `entail` | engine: Literal['rl', 'rdfs'] = 'rl', premises: tuple[str, ...] = (), identity: tuple[str, ...] = (), rounds: int = 32, max_facts: int = 200000, assert_derived: bool = False |
+| `execute_plan` | plan: tuple[atlas.steps.plan.Operator, ...] = (), limit: int = 500, sql: bool = True, expand: GraphExpandOptions = GraphExpandOptions(depth=2, limit=60, follow=(), supports=(), opposes=()) |
 | `extract_llm` | segment: str = 'segment' |
 | `federate` | registries: dict[str, Any] = {}, versions: tuple[str, ...] = (), into: str = 'memory' |
-| `formal_check` | budget: int = 2000, strict: bool = True |
+| `formal_check` | budget: int = 2000, strict: bool = True, engine: Literal['el', 'dl'] = 'el' |
 | `graph_answer` | system: str \| None = None |
 | `graph_expand` | depth: int = 2, limit: int = 60, follow: tuple[str, ...] = (), supports: tuple[str, ...] = (), opposes: tuple[str, ...] = () |
 | `graph_expand_entailed` | depth: int = 2, limit: int = 60, follow: tuple[str, ...] = (), supports: tuple[str, ...] = (), opposes: tuple[str, ...] = () |
@@ -243,8 +264,9 @@ itself prints when an option is wrong -- anything not on this line is refused as
 | `lineage` | follow: tuple[str, ...], depth: int = 6, limit: int = 200, upstream: bool = True |
 | `map_rows` | nodes: dict[str, atlas.steps.map_rows.NodeMapping] = {}, links: tuple[atlas.steps.map_rows.LinkMapping, ...] = () |
 | `mark_units` | no options |
-| `promote` | min_support: int = 3, min_rounds: int = 2, reuse: float = 0.75, require_definition: bool = True, parent: str = '', out: str = 'proposal.yaml' |
-| `reconcile` | supports: tuple[str, ...], opposes: tuple[str, ...], conditions: tuple[str, ...] = (), fields: tuple[str, ...] = ('conditions',) |
+| `promote` | min_support: int = 3, min_rounds: int = 2, reuse: float = 0.75, require_definition: bool = True, parent: str = '', out: str = 'proposal.ttl' |
+| `query` | query: str, sql: bool = True, consistency: bool = False, limit: int = 200, expand: GraphExpandOptions = GraphExpandOptions(depth=2, limit=60, follow=(), supports=(), opposes=()) |
+| `reconcile` | supports: tuple[str, ...], opposes: tuple[str, ...], conditions: tuple[str, ...] = (), fields: tuple[str, ...] = ('conditions',), own: bool = True |
 | `relate` | no options |
 | `relate_llm` | segment: str = 'segment' |
 | `relocate` | no options |
@@ -257,6 +279,7 @@ itself prints when an option is wrong -- anything not on this line is refused as
 | `salience_llm` | categories: tuple[str, ...], type: str, field: str = 'category', summary_field: str = 'summary', segment: str = 'segment' |
 | `select_paths` | depth: int = 4, keep: int = 8, candidates: int = 60, decay: float = 0.8, weights: dict[str, float] = {}, expand: GraphExpandOptions = GraphExpandOptions(depth=2, limit=60, follow=(), supports=(), opposes=()) |
 | `select_subgraph` | cost: float = 1.0, limit: int = 30, whole: tuple[str, ...] = (), parts: tuple[str, ...] = (), expand: GraphExpandOptions = GraphExpandOptions(depth=2, limit=60, follow=(), supports=(), opposes=()) |
+| `shacl_validate` | generate: bool = True, refuse: bool = True |
 | `topics` | follow: tuple[str, ...] = (), min_size: int = 2, terms: int = 5 |
 | `validate` | no options |
 
@@ -270,13 +293,55 @@ Unwritten: canonicalisation of nodes across sources, and an evaluation harness d
 competency questions with a dev/test split. Each is a step with a name that no configuration can
 yet use.
 
+## Reasoning
+
+`atlas/reason/` holds the engines, and the line that decides which runs over what is the first
+invariant: *no provenance, no node*.
+
+| engine | module | profile it is complete for | runs over | a step that runs it |
+|---|---|---|---|---|
+| `rdfs` | `rl.py`, four rules | RDFS | the data | `entail: {engine: rdfs}` |
+| `rl` | `rl.py` | OWL 2 RL | the data | `entail` |
+| `el` | `el.py` | OWL 2 EL | the ontology | `classify`, `formal_check`, `compile_units`, `promote`, and every `load` |
+| `ql` | `ql.py` | OWL 2 QL | a query | `query`, `graph_expand_sql`, `execute_plan` |
+| `dl` | `tableau.py` | OWL 2 DL, less nominals and data ranges | the ontology | `classify: {engine: dl}`, `formal_check: {engine: dl}` |
+| `shacl` | `shacl.py` | -- | the record, closed world | `shacl_validate` |
+
+**Only RDFS and RL run over data**, because only those profiles cannot conclude that an
+individual exists which nobody mentioned. The RL engine is forward chaining over the OWL 2 RL rule
+table: every fact it derives relates individuals that were already there, carries its derivation --
+the rule by its W3C name, the facts it came from, the axiom that licensed it -- and becomes a link
+standing on the spans of its premises, marked derived and never asserted unless a configuration asks.
+A clash -- two facts the ontology says cannot both hold -- is reported with both premises; `supported`
+recomputes what still follows after a retraction from the ground up. EL can conclude that something
+exists, so it is asked about the ontology: the classified hierarchy `Schema.is_a` answers from, the
+empty classes, and in `compile_units` whether a set of universal claims leaves a term with no
+possible member. QL answers a query by rewriting it into a union of queries over what is stored --
+the certain answers, and never a row that is not there. The tableau decides OWL 2 DL: whether the
+ontology has a model and whether each class can have a member, within a budget it reports when it
+runs out of.
+
+Every step that reads relations by name reads them by meaning. `expand` and every selection step
+built on it widen the relations a configuration names -- `follow`, `supports`, `opposes` -- with the
+QL rewriting of a single relation, so following `bears_on` follows `supports` and `disputes`, and an
+objection declared as a sub-relation of `disputes` is still pulled in. `implied(state)` and
+`widen(state, names)` in `atlas/steps/entail.py` are that rule for the steps that read the graph
+directly: `compare`, `lineage`, `align` and `reconcile` see the links an `entail` step derived, and
+the relations the ontology puts under the ones they were given. Nothing here knows a relation's
+name; the ontology does.
+
+A profile named in a configuration is a contract. `load` refuses an ontology outside it, and
+`tests/test_catalogue.py` refuses an architecture whose engine is not complete for the profile it
+names -- with one deliberate exception, the RL engine over data under a DL ontology, where the RL
+rules are sound and the axioms they cannot use are reported by name.
+
 ## A configuration holds more than one chain
 
 A file names `steps`, the chain that reads sources and writes assertions, and may also name
 `ask`, the chain that answers a question over what that wrote. `Pipeline.from_config(path,
 chain="ask")` reads the second; `atlas run` takes the first and `atlas ask` the second. They are
 two chains over one vocabulary and one store, and splitting them into two files would put the
-pack, the store and the options in two places to be kept in step. A file that does not hold the
+ontology, the store and the options in two places to be kept in step. A file that does not hold the
 chain it was asked for is refused by name, because a run that silently does nothing is the worst
 of the three outcomes.
 
@@ -318,6 +383,14 @@ Three guarantees hold whichever architecture filled it:
   after the walk, whatever the limit did, together with the node at the other end.
 - **It holds every relation among the nodes it holds**, not only the ones a walk crossed -- a walk
   records how a node was *first* reached, so a relation between two roots is in nobody's walk.
+
+**A step that reads the package leaves its verdict in it.** `compare`, `reconcile`,
+`count_independence`, `mark_units` and `graph_expand_entailed` each judge what the package
+holds -- which results may be put side by side, what kind of conflict two positions are, how
+independent the support is, what form a claim has, what a node was inferred to be. A verdict
+left in a state key the answer never reads is computed and lost, so `annotate` writes it
+beside the reason each node is there, and a verdict about the package as a whole into
+`Bundle.notes`; `graph_answer` shows both to the model. Nothing is removed for a verdict.
 
 `expand` is the shared closure and takes an optional `adjacency`, which is how a store that can
 answer a bounded neighbourhood better than by handing over every link (`graph_expand_sql`) and a
@@ -411,9 +484,14 @@ spelling is refused as the file is read rather than inside the step.
 claim about the world, kept because what a pass cost and how much of it survived is otherwise lost
 when the process ends. It is written to a store and read back; nothing runs it.
 
-`Schema`, `TypeDef`, `PredicateDef` and `FieldDef` are the loaded ontology. Lookup is by local name
-or by identity, with CURIEs expanded through the prefix map, so `find_type("Measure")`,
-`find_type("ex:Measure")` and the full IRI are one type. See `docs/ontology.md`.
+`Schema`, `TypeDef`, `PredicateDef` and `FieldDef` are the loaded ontology: its OWL 2 axioms, the
+vocabulary they project -- one `TypeDef` per declared class, one `PredicateDef` per object property
+-- the hierarchy the EL engine classified, the classes it found empty, the profile it was held to
+and the SHACL shapes the record is checked against. Lookup is by local name or by identity, with
+CURIEs expanded through the prefix map, so `find_type("Measure")`, `find_type("ex:Measure")` and the
+full IRI are one class; `is_a` answers from the classified hierarchy, so a class an equivalence or a
+restriction puts under another is under it without anybody writing it as a parent. See
+`docs/ontology.md`.
 
 ## The store is a history, not a table
 
@@ -452,7 +530,7 @@ whatever the configuration counted; the store names none of them. Nothing supers
 
 `add_schema` / `get_schema` keep the schemas objects name, addressed by `Schema.version`, so a
 reader resolves a stored `schema_version` back to the vocabulary it was written under instead of
-loading a pack and assuming it is the right one. Writing a version twice is a no-op. The `assert`
+loading an ontology and assuming it is the right one. Writing a version twice is a no-op. The `assert`
 step writes the schema of its run alongside the assertions, so a store that holds an object also
 holds the vocabulary that object names.
 
@@ -498,7 +576,7 @@ re-slices to exactly its own text; `_span_at` is the one place a `Span` is const
 
 When relocation fails, `locate` returns `None`, the statement is discarded and `unplaced` counts
 it; nothing is placed somewhere plausible. `malformed` counts reply items that did not parse and
-`violations` carries what the pack refused, so the gap between what the model offered and what was
+`violations` carries what the ontology refused, so the gap between what the model offered and what was
 written down stays visible in the run's own summary. A quote that relocates onto a node id already
 minted is skipped and not counted: nothing was refused.
 
@@ -511,14 +589,16 @@ instead of escaping a segment that happens to contain a marker line.
 
 ## Schema versioning
 
-`load` hashes the raw bytes of the packs it read, in the order given, and uses the first twelve hex
-characters as `Schema.version`. The hash is over bytes, so a comment or a reordering changes the
+`load` hashes the raw bytes of the ontologies it read -- in load order, each import before the file
+that imports it -- and then of the shapes, and uses the first twelve hex characters as
+`Schema.version`. The shapes are in the hash because a record validated against different shapes is
+a different record. The hash is over bytes, so a comment or a reordering changes the
 version too. That is deliberate: the version answers which files produced this node, not whether
 two schemas mean the same thing.
 
 Every node and link carries that version. Without it, an object written under a type that has since
 been renamed is uninterpretable, and the meaning of a corpus depends on a file that no longer
-exists. When a pack changes under an existing corpus, old objects stay valid artifacts and keep
+exists. When an ontology changes under an existing corpus, old objects stay valid artifacts and keep
 their old version string; nothing rewrites them. Re-validating them reports what no longer fits,
 and re-extracting produces objects with the new version and, because a node id hashes the located
 coordinates and not the schema, the same ids wherever text, type and fields did not change.
@@ -541,19 +621,20 @@ validation is therefore free; only a changed prompt misses the cache, which it s
 
 ## Open questions
 
-- No step produces a `Link`, so the markup is a set of nodes and not yet a graph.
 - Canonicalisation is unwritten: two nodes stating the same thing in different words stay two.
 - `assert` never sets `supersedes`; superseding needs a read that finds the live assertion for a
   target, and nothing offers one yet.
 - The search unit is one segment, so a quote straddling a segment break cannot be located as one span.
-- `Node.fields` is `dict[str, str]`, so a pack constrains field names and nothing else; `FieldDef.datatype`
-  is declared and unchecked.
-- `load` does not check a predicate's domain and range against known type names; a typo surfaces
-  later as a link violation.
+- `Node.fields` is `dict[str, str]`, so an ontology constrains field names and nothing else;
+  `FieldDef.datatype` is read from the datatype property's range and is unchecked.
+- `load` does not check a relation's domain and range against the declared classes; `formal_check`
+  does, when a configuration names it, and SHACL checks each link's ends in closed world.
+- The tableau does not reason with nominals or data ranges; an axiom using one is reported as
+  outside what it decided, never silently dropped.
 - `by_type` on a store compares terms exactly: it neither expands a CURIE nor descends a hierarchy,
   since a store holds no schema.
-- Retrieval is term overlap over one index in one JSON file. There is no idf, no embedding and no
-  graph search; a question in an inflected form the text does not use finds nothing.
+- Ranking is term overlap over one index in one JSON file. There is no idf and no embedding; a
+  question in an inflected form the text does not use finds no seed, and so no walk.
 - `keep_cited` works a line at a time, so a model answering in one uncited paragraph answers nothing
   and a table loses every row without its own citation.
 - A run needs the three model variables even when no step calls a model: the CLI builds one client

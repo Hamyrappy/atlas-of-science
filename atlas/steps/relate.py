@@ -5,10 +5,10 @@ not say how any two of them stood to each other, which is the half of markup an
 architecture that walks a graph is built on. It is deliberately the mirror of
 `relocate`: an extractor claims that two things it has already found are related and
 quotes the text saying so, and the claim becomes a `Link` only if the quote can be
-placed and the pack allows that predicate between those two types.
+placed and the ontology allows that predicate between those two types.
 
 Nothing is invented for a relation that a node would not be allowed to invent. A quote
-that cannot be located is dropped and counted. A predicate the pack does not declare is
+that cannot be located is dropped and counted. A predicate the ontology does not declare is
 dropped and counted. A predicate declared between other types than the ones at hand is
 dropped and counted, with the violation kept, because "the model related a document to
 a reagent" is the kind of error a run has to be able to show rather than total.
@@ -50,7 +50,7 @@ class Relation(BaseModel):
 @register("relate", requires=("sources", "nodes", "relations", "schema"),
           produces=("links", "unrelated", "relation_violations"), options=Nothing)
 def relate(state: State) -> State:
-    """Place every claimed relation and mint a link for each one the pack accepts."""
+    """Place every claimed relation and mint a link for each one the ontology accepts."""
     sources: dict[str, Source] = {source.id: source for source in state["sources"]}
     nodes: dict[str, Node] = {node.ref: node for node in state["nodes"]}
     schema: Schema = state["schema"]
@@ -74,7 +74,7 @@ def relate(state: State) -> State:
             spans=(match.span,),
             schema_version=schema.version,
         )
-        # The pack rules on the relation, exactly as `validate` rules on a node: a
+        # The ontology rules on the relation, exactly as `validate` rules on a node: a
         # predicate it does not declare, or declares between other types, is a defect
         # of this pass and is reported with the case rather than counted away.
         problems = schema.validate_link(link, src.type, dst.type)

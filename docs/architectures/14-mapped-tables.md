@@ -27,19 +27,19 @@ what is not in a column is not in the graph. That is the strength and also the l
 a table that does not record the protocol contributes no protocol, and architecture 5's
 `compare` will report `insufficient`, correctly.
 
-It is also not a generic ETL. The mapping produces objects of a pack that a formal gate
-has checked, and `map_rows` refuses a relation the pack forbids between two types, with
+It is also not a generic ETL. The mapping produces objects of an ontology that a formal gate
+has checked, and `map_rows` refuses a relation the ontology forbids between two classes, with
 the violation reported rather than counted away.
 
 ## 3. The five questions
 
 | | |
 |---|---|
-| **Schema** | `science_core`. The mapping names types and fields of the pack, so a mapping and a pack cannot drift apart silently: a type the pack does not declare fails `validate`, and a relation it forbids is reported. |
-| **Reasoner** | None. The mapping is executed, not inferred. |
+| **Schema** | `science_core_ql`, under `profile: QL`, with the `science_core` shapes. The mapping names classes and fields of the ontology, so a mapping and an ontology cannot drift apart silently: a class the ontology does not declare fails `validate`, a relation it forbids is reported, and a mapped record that breaks a shape is refused. |
+| **Reasoner** | OWL 2 QL, over the query: the mapped rows go into a SQLite store, and the relations a question is walked over are rewritten by the ontology into SQL (`graph_expand_sql`). SHACL (`shacl_validate`) checks each mapped record in closed world before it is asserted. The mapping itself is executed, not inferred. |
 | **Data** | The table, unchanged, as a `Source` whose segments are rendered rows; the graph, in the store, exactly as for any other architecture. |
 | **Components and reuse** | `csv` from the standard library, `Span.of`, `Schema.validate_link`. No dependency and no service. |
-| **Evolution** | A renamed column or a changed unit is a **mapping revision**. Syntactically valid mapping that still returns numbers is how a unit change goes unnoticed, so the mapping is versioned with the pack and the old fixtures are re-run. |
+| **Evolution** | A renamed column or a changed unit is a **mapping revision**. Syntactically valid mapping that still returns numbers is how a unit change goes unnoticed, so the mapping is versioned with the ontology and the old fixtures are re-run. |
 
 ## 4. The decision the whole thing rests on
 
@@ -88,25 +88,53 @@ Two more rules follow from it:
   different fields is a mapping to fix or an assertion to supersede — not something to
   average.
 
-## 6. Pipeline
+## 6. The ontology and the engine
+
+Data that already lives in tables, read through a mapping and queried through an
+ontology, is what OWL 2 QL was designed for — the W3C's name for it is ontology-based data
+access. The ontology rewrites the question instead of the data being copied into a form
+a reasoner can read: a question is a union of plain queries over what the mapping
+produced, and the database answers joins without knowing an ontology exists. So this
+architecture writes into a **SQLite store** (`store: {sqlite: {path: store/tables.db}}`)
+and answers with `graph_expand_sql`, which widens every relation it is given to the
+relations `science_core_ql` makes kinds of it — an inverse read the other way round, a
+sub-relation — before a query is written. The `query` step takes a conjunctive query
+directly for a question that is one:
 
 ```
-ingest_table → map_rows → validate → assert → index_nodes
+q(?result, ?study) :- StudyResult(?result), produced_by(?result, ?study)
+```
+
+and the rewriting also returns a node the ontology makes a `StudyResult` only by the
+relations it stands in, as stored rows and never as invented ones.
+
+The table is closed-world material and SHACL is the closed-world check: `shacl_validate`
+runs between `validate` and `assert`, with the shapes the ontology implies — each class
+closed over its own fields, every mapped node on a span, the classes at each end of each
+mapped relation — so a mapping that puts a study where a result should be is refused
+with the shape's message before the store sees it, the relation refused and its ends kept.
+
+## 7. Pipeline
+
+```
+ingest_table → map_rows → validate → shacl_validate → assert → index_nodes
 ```
 
 ```
-index_nodes → retrieve → graph_expand → graph_answer
+index_nodes → retrieve → graph_expand_sql → graph_answer
 ```
 
-The ask chain is the plain one, which is the whole claim of the architecture: by the
-time a question arrives, there is nothing tabular left.
+The ask chain is the relational one, and otherwise plain, which is the whole claim of the
+architecture: by the time a question arrives there is nothing tabular left, only a store
+the ontology can rewrite a question over.
 
-The two routes combine in one store — run `a14` over the tables and any text
-architecture over the papers, into the same `--store`, and the graph holds both. A
+The two routes combine in one store — run `a14` over the tables and a text architecture
+over the papers into the same SQLite store, by naming it in both manifests, and the graph
+holds both. A
 result mapped from a row and a claim extracted from a sentence are related by whatever
 relates them.
 
-## 7. Evolution, with the failure to watch for
+## 8. Evolution, with the failure to watch for
 
 A source renames a column and changes a unit. The mapping, updated only for the rename,
 keeps returning numbers — and they now mean something else. Nothing syntactic catches
@@ -117,7 +145,7 @@ expected nodes, and a unit change fails them. When the conversion is genuine,
 architecture 5's `Conversion` records the factor and the unit it started from, so the
 transformation is an act with provenance rather than an arithmetic detail.
 
-## 8. Competency questions
+## 9. Competency questions
 
 | Question | What the mapping gives |
 |---|---|
@@ -125,7 +153,7 @@ transformation is an act with provenance rather than an arithmetic detail.
 | Which rows support a published statement? | The span of the row, quotable in an answer |
 | What changed between two versions of this table? | Two sources, two text hashes, two sets of nodes under stable identities |
 
-## 9. Risks and acceptance
+## 10. Risks and acceptance
 
 - **The mapping is the whole quality of the result.** A wrong key column produces a
   confident, well-provenanced, false graph. The empty-key rule removes the commonest
@@ -139,18 +167,20 @@ transformation is an act with provenance rather than an arithmetic detail.
 Acceptance: rows with a blank key must produce no relation between the things they
 mention. If they do, the mapping is not implemented, whatever else works.
 
-## 10. Running it
+## 11. Running it
 
 ```bash
-atlas run architectures/a14.yaml data/*.csv --store store/
-atlas ask architectures/a14.yaml "which results came out of the same study?" --store store/
+atlas run architectures/a14.yaml data/*.csv
+atlas ask architectures/a14.yaml "which results came out of the same study?"
 ```
 
-## 11. Implementation
+## 12. Implementation
 
 | Part | Where |
 |---|---|
 | Rendering rows as a text layer | `atlas/steps/ingest_table.py` (`read_table`, `render`, `cell`) |
 | Executing a mapping | `atlas/steps/map_rows.py` (`map_rows`, `NodeMapping`, `LinkMapping`, `identity`) |
+| Vocabulary and shapes | `ontologies/science_core_ql.ttl`, `ontologies/shapes/science_core.ttl` |
+| Engines | `atlas/reason/ql.py`, `atlas/steps/graph_sql.py`, `atlas/steps/query.py`; `atlas/steps/shacl_validate.py` |
 | Manifest | `architectures/a14.yaml` |
-| Tests | `tests/test_ingest_table.py`, `tests/test_map_rows.py` |
+| Tests | `tests/test_ingest_table.py`, `tests/test_map_rows.py`, `tests/test_shacl_validate.py`, `tests/test_query.py` |

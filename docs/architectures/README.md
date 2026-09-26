@@ -5,8 +5,9 @@ each shipped as a configuration you can run, and each written up in its own
 specification beside this file.
 
 An architecture here is not a mode, a flag or a class. It is a manifest under
-`architectures/`: the packs it loads, the chain of steps that builds the graph, the
-chain that answers a question over it, and the options each step runs under. Nothing in
+`architectures/`: the ontologies it loads and the OWL 2 profile they must stay within, the
+chain of steps that builds the graph, the chain that answers a question over it, the
+engines some of those steps run, and the options each step runs under. Nothing in
 `atlas/` branches on which one is in use — by the time anything runs, there is only a
 pipeline. That is what makes fifteen of them maintainable, and it is also what makes a
 sixteenth cheap: a file, a specification, and whatever step it needs that does not exist
@@ -53,13 +54,35 @@ They share everything else: the same metamodel, the same provenance rule, the sa
 append-only store, the same `Bundle` contract, the same refusal to answer from an
 ungrounded package.
 
+## The ontology each one reasons with
+
+Every architecture names its ontologies, the profile they must stay within, and runs the
+engine made for that profile. Which one follows from what its questions need the ontology
+to say; every specification has a section on its ontology and its engine that says why,
+and the manifest's `reasoning:` line says it in a paragraph.
+
+| Profile | Engine | Runs over | Architectures |
+|---|---|---|---|
+| RDFS | the four RDFS rules | the data | 0 |
+| OWL 2 RL | the RL rule table, with derivations and clashes | the data | 5, 6, 7, 10, 13, 18, 19 |
+| OWL 2 EL | completion-based classification | the ontology | 4, 12, 16 |
+| OWL 2 QL | query rewriting, run as SQL | a query | 8, 14, 20 |
+| OWL 2 DL | the tableau; RL over the data | the ontology | 15 |
+
+Only the first two run over what was extracted, because only those cannot conclude that
+something exists which nobody mentioned. A derived fact carries its derivation and the
+spans of its premises, and a package says which of its relations nobody claimed.
+`tests/test_catalogue.py` refuses an architecture whose engine is not complete for the
+profile it names, and runs every `ask` chain end to end over a small store.
+
 ## The specifications
 
-Each one is a standalone document with the same eleven sections, so two of them can be
-read side by side without hunting for the part that differs. They state what the
-architecture is for, what it is not, how it is built, the exact retrieval algorithm,
-how the schema evolves under it, the competency questions it is meant to answer, its
-risks, and which files in this repository implement it.
+Each one is a standalone document that opens the same way — what it is for, what it is
+not, the five questions — so two of them can be read side by side without hunting for the
+part that differs. Each then has a section on its ontology and its engine, and states how
+it is built, the exact
+retrieval algorithm, how the schema evolves under it, the competency questions it is meant
+to answer, its risks, how to run it, and which files in this repository implement it.
 
 | # | Architecture | Optimises | Specification |
 |---|---|---|---|

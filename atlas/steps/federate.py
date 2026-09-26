@@ -21,6 +21,13 @@ returns both numbers so the difference is visible rather than assumed away.
 A record whose schema version the local Atlas does not know is **held, not dropped**. It
 is a record written under a vocabulary nobody has mapped yet, which is a reason to wait
 for the mapping and not a reason to lose the record.
+
+**Two ids are one thing when the ontology says so.** Registries mint their own ids, so one
+study published by two of them arrives as two nodes. When an `entail` step has run with an
+identity relation named, the OWL 2 RL engine's identities -- two nodes made one
+individual, each with the rule and the premises -- are read here, and `individuals` counts
+what the package is about after them. Sources are still counted as sources: two papers
+reporting one study are two independent reports of it, which is what confirmation is.
 """
 
 from __future__ import annotations
@@ -32,6 +39,7 @@ from pydantic import Field
 
 from atlas.model import Assertion, Frozen, Node, Source
 from atlas.steps import State, register
+from atlas.steps.graph_expand import annotate
 from atlas.store import Store, open_store
 
 
@@ -51,6 +59,12 @@ class Counted(Frozen):
     registries: int = Field(description="Registries that published them; never the same thing")
     republished: tuple[str, ...] = Field(
         default=(), description="Sources more than one registry published"
+    )
+    individuals: int = Field(
+        0, description="Distinct things the claims are about, once identities are applied"
+    )
+    identified: tuple[tuple[str, str], ...] = Field(
+        default=(), description="Pairs of nodes the ontology made one individual"
     )
 
     @property
@@ -137,7 +151,9 @@ def check(
 
 
 def independence(
-    nodes: Iterable[Node], origins: Mapping[str, tuple[str, ...]]
+    nodes: Iterable[Node],
+    origins: Mapping[str, tuple[str, ...]],
+    identities: Iterable[tuple[str, str]] = (),
 ) -> Counted:
     """How much independent support a set of claims has, counted over sources and not publishers.
 
@@ -146,8 +162,25 @@ def independence(
     out of its own topology -- which is the characteristic failure of federating
     anything. `republished` names the sources that arrived from more than one registry,
     so the gap between the two numbers can be explained rather than argued about.
+
+    `identities` are pairs of node ids an engine made one individual; `individuals` is how
+    many distinct things the package holds after them, and `identified` the pairs that
+    fell inside it.
     """
     held = tuple(nodes)
+    ids = {node.id for node in held}
+    parent = {node_id: node_id for node_id in ids}
+
+    def root(node_id: str) -> str:
+        while parent[node_id] != node_id:
+            parent[node_id] = parent[parent[node_id]]
+            node_id = parent[node_id]
+        return node_id
+
+    inside = sorted({tuple(sorted(pair)) for pair in identities if set(pair) <= ids
+                     and pair[0] != pair[1]})
+    for first, second in inside:
+        parent[root(first)] = root(second)
     sources = {node.spans[0].source_id for node in held}
     registries: set[str] = set()
     shared: dict[str, set[str]] = {}
@@ -159,14 +192,27 @@ def independence(
         sources=len(sources),
         registries=len(registries),
         republished=tuple(sorted(name for name, who in shared.items() if len(who) > 1)),
+        individuals=len({root(node_id) for node_id in ids}),
+        identified=tuple(inside),
     )
 
 
 @register("count_independence", requires=("bundle", "origins"),
-          produces=("independence",))
+          produces=("independence", "bundle"))
 def count_independence(state: State) -> State:
-    """Count how much of the package's support is independent, over the sources behind it."""
-    return {"independence": independence(state["bundle"].nodes, state["origins"])}
+    """Count how much of the package's support is independent, over the sources behind it.
+
+    Reads `identities` when an `entail` step before it produced them, so what the ontology
+    made one individual is counted once.
+    """
+    pairs = [(one.first, one.second) for one in state.get("identities", ())]
+    bundle = state["bundle"]
+    counted = independence(bundle.nodes, state["origins"], pairs)
+    note = (f"independent support: {counted.sources} distinct sources, published by "
+            f"{counted.registries} registries, about {counted.individuals} distinct things")
+    if counted.republished:
+        note += f"; republished by more than one registry: {', '.join(counted.republished)}"
+    return {"independence": counted, "bundle": annotate(bundle, {}, [note])}
 
 
 def _add(items: list[str], value: str) -> None:

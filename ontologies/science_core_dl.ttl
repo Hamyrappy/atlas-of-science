@@ -1,0 +1,52 @@
+# The science core in OWL 2 DL: everything the other modules say, and what none of the
+# tractable profiles can.
+#
+# This module is not reasoned over data. It is what the tableau engine checks before an
+# architecture that declares the DL profile writes anything: that every class can have a
+# member, that the ontology as a whole has a model, and -- because this is where the
+# expressive axioms are -- that they do not contradict the simpler ones. A union on the
+# right, a universal restriction, a qualified cardinality: each is a place a hand-written
+# ontology goes wrong in a way the other engines would never notice, because they never
+# read it.
+#
+# The axioms that need DL:
+#
+# * an evidence line argues in exactly one direction -- it supports or it disputes,
+#   and not neither -- which is a union on the right;
+# * a statement states exactly one proposition, which is a qualified cardinality;
+# * everything a line of argument rests on is a result, which is a universal restriction
+#   and says more than the range of rests_on, since it applies through sub-relations;
+# * a negative and a positive outcome partition the results that have a direction.
+
+@prefix core:  <https://w3id.org/atlas-of-science/core#> .
+@prefix atlas: <https://w3id.org/atlas-of-science/substrate#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix obo:   <http://purl.obolibrary.org/obo/> .
+@prefix evi:   <https://w3id.org/EVI#> .
+@prefix sepio: <https://w3id.org/sepio-framework/sepio-linkml/> .
+
+<https://w3id.org/atlas-of-science/science_core_dl>
+    a owl:Ontology ;
+    rdfs:label "Atlas of Science: the scientific argument, in full" ;
+    owl:versionIRI <https://w3id.org/atlas-of-science/science_core_dl/0.2> ;
+    owl:imports <https://w3id.org/atlas-of-science/science_core_rl>,
+                <https://w3id.org/atlas-of-science/science_core_el> ;
+    atlas:profile "DL" .
+
+sepio:EvidenceLine rdfs:subClassOf [ owl:unionOf ( core:SupportingLine core:DisputingLine ) ] .
+
+sepio:Statement rdfs:subClassOf [ a owl:Restriction ; owl:onProperty core:states ;
+    owl:qualifiedCardinality "1"^^xsd:nonNegativeInteger ; owl:onClass sepio:Proposition ] .
+
+sepio:EvidenceLine rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty core:restsOn ; owl:allValuesFrom sepio:StudyResult ] .
+
+core:ContestedProposition owl:equivalentClass [ owl:intersectionOf ( sepio:Proposition
+    [ a owl:Restriction ; owl:onProperty [ owl:inverseOf core:disputes ] ;
+      owl:someValuesFrom sepio:EvidenceLine ] ) ] .
+
+core:SupportedProposition owl:equivalentClass [ owl:intersectionOf ( sepio:Proposition
+    [ a owl:Restriction ; owl:onProperty [ owl:inverseOf core:supports ] ;
+      owl:someValuesFrom sepio:EvidenceLine ] ) ] .

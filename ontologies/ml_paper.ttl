@@ -1,0 +1,87 @@
+# An ontology for machine-learning papers: what a result is, what it was measured on, and
+# what the authors conclude from it. Six classes and eight relations, the smallest set that
+# still lets two papers be compared. Nothing here is part of the core -- load it when the
+# corpus is of this kind, and write another ontology when it is not.
+#
+# It is plain RDFS: a class list and relation signatures. The namespace is an example one
+# on purpose. This is a vocabulary to start from and to copy, not an identity anybody
+# should cite.
+
+@prefix ml:    <https://example.org/ontology/ml-paper#> .
+@prefix field: <https://w3id.org/atlas-of-science/fields#> .
+@prefix atlas: <https://w3id.org/atlas-of-science/substrate#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix schema: <https://schema.org/> .
+@prefix dcat:  <http://www.w3.org/ns/dcat#> .
+
+<https://example.org/ontology/ml-paper>
+    a owl:Ontology ;
+    rdfs:label "Machine-learning papers" ;
+    owl:versionIRI <https://example.org/ontology/ml-paper/0.2> ;
+    owl:imports <https://w3id.org/atlas-of-science/fields> ;
+    atlas:profile "RDFS", "EL", "QL", "RL", "DL" .
+
+ml:Task a owl:Class ;
+    atlas:name "Task" ;
+    skos:definition "A problem being addressed, stated independently of any solution." ;
+    atlas:fields ( field:name field:definition ) ; atlas:labelField field:name .
+
+ml:Method a owl:Class ;
+    atlas:name "Method" ;
+    skos:definition "A procedure, model or technique applied to a task." ;
+    atlas:fields ( field:name field:summary ) ; atlas:labelField field:name .
+
+ml:Dataset a owl:Class ;
+    atlas:name "Dataset" ;
+    skos:definition "A body of data a method was applied to or evaluated on." ;
+    skos:closeMatch schema:Dataset, dcat:Dataset ;
+    atlas:fields ( field:name field:description ) ; atlas:labelField field:name .
+
+ml:Metric a owl:Class ;
+    atlas:name "Metric" ;
+    skos:definition "A quantity used to judge a result." ;
+    atlas:fields ( field:name field:unit ) ; atlas:labelField field:name .
+
+ml:Result a owl:Class ;
+    atlas:name "Result" ;
+    skos:definition "A measured outcome, tied to the method, dataset and metric it came from." ;
+    atlas:fields ( field:statement field:value field:conditions ) ; atlas:labelField field:statement .
+
+ml:Claim a owl:Class ;
+    atlas:name "Claim" ;
+    skos:definition "An assertion about the world, which a result may support or contradict." ;
+    atlas:fields ( field:statement field:scope ) ; atlas:labelField field:statement .
+
+ml:addresses a owl:ObjectProperty ;
+    atlas:name "addresses" ; rdfs:domain ml:Method ; rdfs:range ml:Task ;
+    skos:definition "The method is proposed as a solution to the task." .
+
+ml:evaluatedOn a owl:ObjectProperty ;
+    atlas:name "evaluated_on" ; rdfs:domain ml:Method ; rdfs:range ml:Dataset ;
+    skos:definition "The method was run against this data." .
+
+ml:measuredBy a owl:ObjectProperty ;
+    atlas:name "measured_by" ; rdfs:domain ml:Result ; rdfs:range ml:Metric ;
+    skos:definition "The result is expressed in this metric." .
+
+ml:obtainedBy a owl:ObjectProperty ;
+    atlas:name "obtained_by" ; rdfs:domain ml:Result ; rdfs:range ml:Method ;
+    skos:definition "The result was produced by this method." .
+
+ml:reportedFor a owl:ObjectProperty ;
+    atlas:name "reported_for" ; rdfs:domain ml:Result ; rdfs:range ml:Dataset ;
+    skos:definition "The result was obtained on this data." .
+
+ml:supports a owl:ObjectProperty ;
+    atlas:name "supports" ; rdfs:domain ml:Result ; rdfs:range ml:Claim ;
+    skos:definition "The result is offered as evidence for the claim." .
+
+ml:contradicts a owl:ObjectProperty ;
+    atlas:name "contradicts" ; rdfs:domain ml:Result ; rdfs:range ml:Claim ;
+    skos:definition "The result is evidence against the claim." .
+
+ml:extends a owl:ObjectProperty ;
+    atlas:name "extends" ; rdfs:domain ml:Method ; rdfs:range ml:Method ;
+    skos:definition "The method is presented as a development of an earlier one." .

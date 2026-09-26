@@ -12,8 +12,8 @@
 
 A vocabulary written before the corpus was read is wrong about the corpus, and the
 useful question is *which part* of it is wrong. This architecture imports a scientific
-core up front and then lets the corpus push back: everything the pack has no word for
-is kept rather than discarded, pooled by what the labels have in common, counted in
+core up front and then lets the corpus push back: everything the ontology has no word
+for is kept rather than discarded, pooled by what the labels have in common, counted in
 independent source families, defined, checked against what already exists, and put
 through a gate. What comes out the other end is a **proposal** — a file somebody reads
 — and never an edit to the vocabulary a corpus is being marked up against.
@@ -26,8 +26,8 @@ discipline of this architecture.
 
 It is not "unsupervised ontology learning". Three things are deliberately absent:
 
-- **Nothing promotes itself.** `promote` writes `proposal.yaml`; merging it into a pack
-  is a person's decision, and the pack is what `Schema.version` hashes, so an unreviewed
+- **Nothing promotes itself.** `promote` writes `proposal.ttl`; merging it into an
+  ontology is a person's decision, and the ontology is what `Schema.version` hashes, so an unreviewed
   proposal cannot change what any object is written under.
 - **A cluster is not a class.** Topics carry the kinds of their members and report
   `mixed` when there is more than one. A dense group holding a method, a task and a
@@ -41,18 +41,44 @@ It is not "unsupervised ontology learning". Three things are deliberately absent
 
 | | |
 |---|---|
-| **Schema** | `science_core` (the argument: proposition, position, evidence line, result, conditions, computation) + `science_map` (topic, kept passage) + `scierc` (mention types and their relations). The first is what the corpus extends; the third is what mentions are typed by. |
-| **Reasoner** | None at query time. The gate is where judgement happens, and it is mechanical: support, rounds, definition, reuse. Topic clustering is not inference and is never called that. |
-| **Data** | Nodes, links and their assertions in the store; the candidate pool as `candidates.json` beside it; the proposal as `proposal.yaml`; the topic map rebuilt per run and never asserted. |
+| **Schema** | `science_core` (the argument: proposition, position, evidence line, result, conditions, computation) + `science_map` (topic, kept passage) + `scierc` (mention classes and their relations), under `profile: EL`. The first is what the corpus extends; the third is what mentions are typed by. |
+| **Reasoner** | OWL 2 EL, over the ontology only. `classify` (strict) classifies it before the run writes anything; `promote` loads each proposal with it and classifies again. The gate itself is mechanical — support, rounds, definition, reuse — and topic clustering is not inference and is never called that. |
+| **Data** | Nodes, links and their assertions in the store; the candidate pool as `candidates.json` beside it; the proposal as `proposal.ttl`, an OWL module; the topic map rebuilt per run and never asserted. |
 | **Components and reuse** | The imported core; the SciERC scheme for mention types; `atlas.text` for folding and terms; `atlas.walk` for the connected groups; the shared `Bundle`. |
-| **Evolution** | The subject of the architecture. Pool → definition → reuse check → gate → proposal → review → pack edit → new `Schema.version`. Objects already written keep naming the version they were written under. |
+| **Evolution** | The subject of the architecture. Pool → definition → reuse check → gate → proposal → review → ontology edit → new `Schema.version`. Objects already written keep naming the version they were written under. |
 
-## 4. Pipeline
+## 4. The ontology and the engine
 
-### 4.1 Build
+What this architecture changes is the class hierarchy, so its engine is the one that
+classifies a hierarchy completely in polynomial time: **OWL 2 EL**, `atlas/reason/el.py`.
+Nothing here reasons over data. The profile named in the manifest is `EL`, and the three
+ontologies are within it; an axiom outside it is refused when the configuration is read.
+
+It runs in two places.
+
+- **Before the run**, `classify: {engine: el, strict: true}` classifies the ontology the
+  corpus is about to be marked up against and stops the run if a class can have no
+  member — a vocabulary with an empty class in it would refuse every statement of that
+  class and look like a corpus that never mentions it.
+- **At the gate**, `promote` writes the promoted candidates as an OWL module,
+  `proposal.ttl`: each class under a placeholder identity (`urn:atlas:local:proposed#…`,
+  which the loader reads as *no identity minted yet*), its definition, the configured
+  parent, and an editorial note with its support, its rounds and the nearest existing
+  term. The module imports the run's ontology and is **loaded with it exactly as a
+  configuration would load it** — parsed, merged, classified, held to the profile — and
+  what that finds comes back in `proposal_problems`: a name the ontology already gives to
+  another class, a parent that leaves the new class empty, an axiom outside the profile.
+  A reviewer is handed a module known to load, or told why it does not.
+
+The engine never promotes anything. It can say a proposal is coherent; only a person can
+say it is right.
+
+## 5. Pipeline
+
+### 5.1 Build
 
 ```
-ingest_pdf → extract_llm → salience_llm → relocate → validate
+classify{el} → ingest_pdf → extract_llm → salience_llm → relocate → validate
            → relate_llm → relate → assert
            → induce → define_llm → promote → index_nodes
 ```
@@ -97,11 +123,13 @@ by name.
 Reuse is checked before the definition on purpose: a candidate that is the term the
 schema already has does not need a definition written for it.
 
-What passes becomes `proposal.yaml` — a pack **fragment**, with no prefixes and no
-IRIs, because minting an identity is the review and a file that guessed one would have
-made the review look finished.
+What passes becomes `proposal.ttl` — an OWL module importing the run's ontology, with
+placeholder identities rather than minted ones, because minting an identity is the
+review and a file that guessed one would have made the review look finished. It is
+loaded with the ontology and classified before it is written; `proposal_problems` says
+what that found.
 
-### 4.2 Ask
+### 5.2 Ask
 
 ```
 index_nodes → topics → retrieve_dual → graph_expand → graph_answer
@@ -117,7 +145,7 @@ branch found it (`Hit.via`). A node reached only through a topic scores at
 `weight × topic score`, below one the question actually named, which is what stops a
 large topic from flooding the seeds.
 
-## 5. The three identities
+## 6. The three identities
 
 This is the part that is easiest to get wrong and the part the architecture exists to
 get right.
@@ -126,13 +154,13 @@ get right.
 |---|---|---|---|
 | **Mention** | A place in a text where something is named | A `Node` with its span | Not an entity: two pages naming one method are two nodes until something says otherwise |
 | **Topic** | A group of things the corpus discusses together | A `Topic`, rebuilt per run, never asserted | Not a class: `mixed` says when it holds several kinds |
-| **Class** | A kind of thing | A `TypeDef` in a pack, hashed into `Schema.version` | Not something a model can create: only a reviewed proposal becomes one |
+| **Class** | A kind of thing | An OWL class in an ontology, hashed into `Schema.version` | Not something a model can create: only a reviewed proposal becomes one |
 
 The only route from the first to the third runs through `induce` → `define_llm` →
 `promote` → a person. There is no route at all from the second to the third, and that
 is deliberate.
 
-## 6. Graph retrieval, exactly
+## 7. Graph retrieval, exactly
 
 ```
 question
@@ -150,13 +178,13 @@ question
   → keep only lines citing a reference that was shown
 ```
 
-## 7. Evolution, with a worked negative case
+## 8. Evolution, with a worked negative case
 
-The corpus starts using a word the pack has no room for. Round one: three papers, one
+The corpus starts using a word the ontology has no room for. Round one: three papers, one
 venue — `induce` pools it, `support` is 1 because the family is the venue, the gate
 refuses it for thin support. Round two: two more venues — support 3, rounds 2,
 `define_llm` writes "a preparation step, performed before measurement", the nearest
-existing term is `Study` at 0.2 overlap, and it promotes into `proposal.yaml`.
+existing term is `Study` at 0.2 overlap, and it promotes into `proposal.ttl`, which loads and classifies it under `Study`.
 
 The negative case is the one that matters. A group forms around a retrieval model, a
 question-answering task and a benchmark; they co-occur constantly and `topics` puts them
@@ -164,9 +192,9 @@ in one topic. That topic is **not** a candidate class, and nothing in the pipeli
 make it one: topics and candidates are different objects reached by different steps, and
 the topic reports `mixed: true` with `kinds` naming three types. The right outcome is
 what the architecture does — the group stays on the map, and any class that comes out of
-that area comes out of `induce` from labels the pack refused, one kind at a time.
+that area comes out of `induce` from labels the ontology refused, one kind at a time.
 
-## 8. Competency questions
+## 9. Competency questions
 
 | Question | What it uses | Why it is answerable here |
 |---|---|---|
@@ -175,7 +203,7 @@ that area comes out of `induce` from labels the pack refused, one kind at a time
 | Which of these were already somebody else's word? | `Candidate.nearest`, `Candidate.similarity` | Reuse is reported on every candidate, promoted or refused |
 | What does this corpus say for and against a claim? | `graph_expand` with supports/opposes | The imported core carries the argument |
 
-## 9. Risks and acceptance
+## 10. Risks and acceptance
 
 - **Salience loses the negative result.** The failure that matters. `kept` counts per
   category; a corpus where `negative result` is near zero is either unusually cheerful or
@@ -191,25 +219,26 @@ that area comes out of `induce` from labels the pack refused, one kind at a time
 
 Acceptance: a corpus with the same classes but a different topic mix must not change the
 vocabulary. Run the build over two corpora that share their types and differ in subject
-emphasis; `proposal.yaml` must come out empty for the second.
+emphasis; `proposal.ttl` must come out empty for the second.
 
-## 10. Running it
+## 11. Running it
 
 ```bash
 atlas run architectures/a04.yaml corpus/*.pdf --store store/
 atlas run architectures/a04.yaml more/*.pdf   --store store/     # round two
-cat store/proposal.yaml                                          # for a person to read
+cat store/proposal.ttl                                           # for a person to read
 atlas ask architectures/a04.yaml "what has this corpus started calling new?" --store store/
 ```
 
-## 11. Implementation
+## 12. Implementation
 
 | Part | Where |
 |---|---|
-| Vocabulary | `packs/science_core.yaml`, `packs/science_map.yaml`, `packs/scierc.yaml` |
+| Vocabulary | `ontologies/science_core.ttl`, `ontologies/science_map.ttl`, `ontologies/scierc.ttl` |
+| Engine | `atlas/reason/el.py`; `atlas/steps/classify.py`; the proposal check in `atlas/steps/induce.py` (`module`, `check`) |
 | Salience | `atlas/steps/salience.py` |
-| Pool and gate | `atlas/steps/induce.py` (`induce`, `promote`, `similarity`, `pack`) |
+| Pool and gate | `atlas/steps/induce.py` (`induce`, `promote`, `similarity`, `module`) |
 | Definitions | `atlas/steps/define_llm.py` |
 | Map and dual search | `atlas/steps/topics.py` (`topics`, `retrieve_dual`, `Topic.mixed`) |
 | Manifest | `architectures/a04.yaml` |
-| Tests | `tests/test_salience.py`, `tests/test_induce.py`, `tests/test_define_llm.py`, `tests/test_topics.py` |
+| Tests | `tests/test_salience.py`, `tests/test_induce.py`, `tests/test_classify.py`, `tests/test_el.py`, `tests/test_define_llm.py`, `tests/test_topics.py` |

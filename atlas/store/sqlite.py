@@ -241,6 +241,20 @@ class SqliteStore:
         ).fetchall()
         return tuple(Link.model_validate_json(row["body"]) for row in rows)
 
+    def select(self, sql: str, params: Iterable[object] = ()) -> list[tuple]:
+        """Rows of a read-only query over the projection: what a rewritten query runs as.
+
+        The OWL 2 QL engine rewrites an ontological question into plain joins over `nodes`
+        and `links`, and this is where they execute -- which is the point of the relational
+        architecture. Anything but a single SELECT (or a WITH leading to one) is refused:
+        the store is append-only, and a read seam that could write would not be.
+        """
+        statement = sql.strip().rstrip(";")
+        head = statement.split(None, 1)[0].upper() if statement else ""
+        if head not in ("SELECT", "WITH") or ";" in statement:
+            raise ValueError("only a single read-only SELECT runs through `select`")
+        return [tuple(row) for row in self._db.execute(statement, list(params)).fetchall()]
+
     # ---- everything else the protocol asks for ----------------------------------------
     def artifact(self, name: str) -> Path | None:
         """Beside the database file; a store held in memory has nowhere and says so."""

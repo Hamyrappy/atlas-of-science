@@ -95,3 +95,31 @@ class _Empty:
 
     def links(self):
         return ()
+
+
+def test_a_positions_own_wording_is_not_a_condition_when_the_ontology_says_so(
+    science: Fixture,
+) -> None:
+    """Where every class states itself in one shared field, two positions always differ in
+    it -- that is what makes them two positions -- and counting it as a condition turns
+    every disagreement into a "conditions" case."""
+    worded = OPTIONS.model_copy(update={"fields": ("summary",), "conditions": ()})
+    [by_wording] = reconcile(state(science, worded), worded)["conflicts"]
+    assert by_wording.verdict == "conditions"
+    assert "summary" in by_wording.conditions
+
+    unworded = worded.model_copy(update={"own": False})
+    [conflict] = reconcile(state(science, unworded), unworded)["conflicts"]
+    assert "summary" not in conflict.conditions
+
+
+def test_each_side_of_a_conflict_carries_the_verdict_into_the_package(
+    science: Fixture,
+) -> None:
+    result = reconcile(state(science), OPTIONS)
+
+    [conflict] = result["conflicts"]
+    reasons = result["bundle"].reasons
+    assert reasons[conflict.supporting].startswith(conflict.verdict)
+    assert conflict.opposing in reasons[conflict.supporting]
+    assert reasons[conflict.opposing].startswith(conflict.verdict)
