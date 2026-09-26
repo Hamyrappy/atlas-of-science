@@ -111,3 +111,15 @@ def test_a_positions_own_wording_is_not_a_condition_when_the_ontology_says_so(
     unworded = worded.model_copy(update={"own": False})
     [conflict] = reconcile(state(science, unworded), unworded)["conflicts"]
     assert "summary" not in conflict.conditions
+
+
+def test_each_side_of_a_conflict_carries_the_verdict_into_the_package(
+    science: Fixture,
+) -> None:
+    result = reconcile(state(science), OPTIONS)
+
+    [conflict] = result["conflicts"]
+    reasons = result["bundle"].reasons
+    assert reasons[conflict.supporting].startswith(conflict.verdict)
+    assert conflict.opposing in reasons[conflict.supporting]
+    assert reasons[conflict.opposing].startswith(conflict.verdict)

@@ -190,3 +190,14 @@ def test_without_identities_every_node_is_its_own_individual() -> None:
 
     assert counted.individuals == 2
     assert counted.identified == ()
+
+
+def test_the_count_is_written_into_the_package_as_a_note_the_answer_reads() -> None:
+    bundle = Bundle(roots=(CLAIM.id,), nodes=(CLAIM, SECOND))
+
+    result = count_independence({"bundle": bundle,
+                                 "origins": {CLAIM.id: ("one", "two"), SECOND.id: ("two",)}})
+
+    [note] = result["bundle"].notes
+    assert note.startswith("independent support: 2 distinct sources, published by 2 registries")
+    assert "republished by more than one registry: paper-1" in note

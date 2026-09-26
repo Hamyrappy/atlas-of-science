@@ -39,6 +39,7 @@ from pydantic import Field
 
 from atlas.model import Assertion, Frozen, Node, Source
 from atlas.steps import State, register
+from atlas.steps.graph_expand import annotate
 from atlas.store import Store, open_store
 
 
@@ -197,7 +198,7 @@ def independence(
 
 
 @register("count_independence", requires=("bundle", "origins"),
-          produces=("independence",))
+          produces=("independence", "bundle"))
 def count_independence(state: State) -> State:
     """Count how much of the package's support is independent, over the sources behind it.
 
@@ -205,7 +206,13 @@ def count_independence(state: State) -> State:
     made one individual is counted once.
     """
     pairs = [(one.first, one.second) for one in state.get("identities", ())]
-    return {"independence": independence(state["bundle"].nodes, state["origins"], pairs)}
+    bundle = state["bundle"]
+    counted = independence(bundle.nodes, state["origins"], pairs)
+    note = (f"independent support: {counted.sources} distinct sources, published by "
+            f"{counted.registries} registries, about {counted.individuals} distinct things")
+    if counted.republished:
+        note += f"; republished by more than one registry: {', '.join(counted.republished)}"
+    return {"independence": counted, "bundle": annotate(bundle, {}, [note])}
 
 
 def _add(items: list[str], value: str) -> None:

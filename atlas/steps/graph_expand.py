@@ -67,6 +67,10 @@ class Bundle(Frozen):
     snapshot: str = Field(default="", description="Schema version the package was built under")
     method: str = Field(default="", description="Which architecture's selection produced it")
     partial: bool = False
+    notes: tuple[str, ...] = Field(
+        default=(),
+        description="What a step that read the package concluded about it as a whole",
+    )
 
     @property
     def grounded(self) -> bool:
@@ -188,6 +192,25 @@ def expand(
         method=method,
         partial=reached.partial,
     )
+
+
+def annotate(bundle: Bundle, reasons: Mapping[str, str], notes: Iterable[str] = ()) -> Bundle:
+    """The package with what a later step concluded written into it, beside what was there.
+
+    A step that reads a package and judges it -- which results may be compared, what kind
+    of conflict two positions are, how independent the support is -- has to leave its
+    verdict where the answer will see it, or the verdict is computed and then lost. It
+    goes into the reason a node is there, after the reason already given, and a verdict
+    about the package as a whole goes into `notes`. Nothing is removed: a node the verdict
+    goes against is still what a source said.
+    """
+    written = dict(bundle.reasons)
+    held = {node.id for node in bundle.nodes}
+    for node_id, said in reasons.items():
+        if node_id in held and said:
+            written[node_id] = f"{written[node_id]}; {said}" if node_id in written else said
+    return bundle.model_copy(update={"reasons": written,
+                                     "notes": (*bundle.notes, *(one for one in notes if one))})
 
 
 def widened(options: GraphExpandOptions, schema: Schema) -> GraphExpandOptions:

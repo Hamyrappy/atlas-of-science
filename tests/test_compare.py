@@ -218,3 +218,17 @@ def test_a_results_own_wording_is_not_a_condition_when_the_ontology_says_so(
     reached = own.model_copy(update={"own": False})
     [by_conditions] = compare(state(science), reached)["comparisons"]
     assert "statement" not in by_conditions.differed
+
+
+def test_the_verdicts_are_written_into_the_package_where_the_answer_reads_them(
+    science: Fixture,
+) -> None:
+    """A comparison computed and then left in a state key the answer never reads is a
+    comparison nobody sees; the verdict goes beside the reason each result is there."""
+    result = compare(state(science), OPTIONS)
+
+    reasons = result["bundle"].reasons
+    [one] = result["comparisons"]
+    [baseline] = {science.nodes["result-1"].id, science.nodes["result-2"].id} - {one.node_id}
+    assert "compared against" in reasons[baseline]
+    assert reasons[one.node_id].startswith(f"{one.verdict} against the baseline")

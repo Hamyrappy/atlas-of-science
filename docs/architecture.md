@@ -214,11 +214,11 @@ generated from the live registry.
 
 | Name | Reads from the state | Adds | Module |
 |---|---|---|---|
-| `compare` | `bundle`, `store` | `comparisons`, `comparable` | `atlas/steps/compare.py` |
-| `reconcile` | `bundle`, `store` | `conflicts`, `disagreements` | `atlas/steps/reconcile.py` |
+| `compare` | `bundle`, `store` | `comparisons`, `comparable`, `bundle` | `atlas/steps/compare.py` |
+| `reconcile` | `bundle`, `store` | `conflicts`, `disagreements`, `bundle` | `atlas/steps/reconcile.py` |
 | `lineage` | `store`, `cause` | `affected`, `lineage_partial` | `atlas/steps/lineage.py` |
 | `align` | `store` | `alignment`, `discrepancies` | `atlas/steps/align.py` |
-| `count_independence` | `bundle`, `origins` | `independence` | `atlas/steps/federate.py` |
+| `count_independence` | `bundle`, `origins` | `independence`, `bundle` | `atlas/steps/federate.py` |
 | `federate` | — | `store`, `synced`, `held`, `origins` | `atlas/steps/federate.py` |
 
 **Answering.**
@@ -383,6 +383,14 @@ Three guarantees hold whichever architecture filled it:
   after the walk, whatever the limit did, together with the node at the other end.
 - **It holds every relation among the nodes it holds**, not only the ones a walk crossed -- a walk
   records how a node was *first* reached, so a relation between two roots is in nobody's walk.
+
+**A step that reads the package leaves its verdict in it.** `compare`, `reconcile`,
+`count_independence`, `mark_units` and `graph_expand_entailed` each judge what the package
+holds -- which results may be put side by side, what kind of conflict two positions are, how
+independent the support is, what form a claim has, what a node was inferred to be. A verdict
+left in a state key the answer never reads is computed and lost, so `annotate` writes it
+beside the reason each node is there, and a verdict about the package as a whole into
+`Bundle.notes`; `graph_answer` shows both to the model. Nothing is removed for a verdict.
 
 `expand` is the shared closure and takes an optional `adjacency`, which is how a store that can
 answer a bounded neighbourhood better than by handing over every link (`graph_expand_sql`) and a

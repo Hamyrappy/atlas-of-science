@@ -35,7 +35,7 @@ from pydantic import Field
 from atlas.model import Frozen, Node
 from atlas.steps import State, register
 from atlas.steps.entail import implied, widen
-from atlas.steps.graph_expand import Bundle
+from atlas.steps.graph_expand import Bundle, annotate
 from atlas.text import normalise
 from atlas.walk import Adjacency
 
@@ -100,10 +100,15 @@ class CompareOptions(Frozen):
     )
 
 
-@register("compare", requires=("bundle", "store"), produces=("comparisons", "comparable"),
-          options=CompareOptions)
+@register("compare", requires=("bundle", "store"),
+          produces=("comparisons", "comparable", "bundle"), options=CompareOptions)
 def compare(state: State, options: CompareOptions) -> State:
-    """Sort the results of the package against the first of them, and report every exclusion."""
+    """Sort the results of the package against the first of them, and report every exclusion.
+
+    The verdicts are also written into the package (`annotate`), beside the reason each
+    result is there, so the answer is told which results may be put side by side and on
+    which condition the others were excluded -- rather than averaging what it was shown.
+    """
     bundle: Bundle = state["bundle"]
     schema = state.get("schema")
     results = [
@@ -127,7 +132,11 @@ def compare(state: State, options: CompareOptions) -> State:
     found = tuple(
         _compare(baseline, other, conditions, asserted, options) for other in rest
     )
-    return {"comparisons": found, "comparable": sum(one.verdict == "comparable" for one in found)}
+    said = {baseline.id: "the result the others are compared against"}
+    for one in found:
+        said[one.node_id] = f"{one.verdict} against the baseline: {one.reason}"
+    return {"comparisons": found, "comparable": sum(one.verdict == "comparable" for one in found),
+            "bundle": annotate(bundle, said)}
 
 
 def convert(value: str, unit: str, into: str, table: Mapping[str, float]) -> Conversion | None:
