@@ -33,8 +33,23 @@ and section 2.10 makes ontology evolution a contract of all of them, with soluti
 that is exempt from both. This library has neither as a shared contract: the container does not
 exist at all, and evolution is a mechanism of architecture 4 (`induce` → `define_llm` →
 `promote`) plus formal gates at 10, 12 and 15. Eleven of the fifteen architectures ship with a
-vocabulary that cannot change and a record that cannot be published. The `S` tasks are those two
-contracts; the `A` tasks are what each architecture then owes on top of them.
+vocabulary that cannot change and a record that cannot be published.
+
+Those are the two the design states as contracts. Reading the build path against §3.1 and §3.2
+finds four more that are missing rather than reduced: a quote that will not bind is **dropped**
+here and quarantined there; a mention is never resolved to an entity, so the same method in two
+papers stays two things; a proposition has no identity beyond its text; and the model is shown
+one enum of class names where the design shows it the slots of a class. The `S` tasks are all
+six; the `A` tasks are what each architecture then owes on top of them.
+
+**What is not here at all.** The design has twenty solutions and a control. This library ships
+fifteen: 1, 2, 3, 9, 11 and 17 are absent, and that is the owner's selection, not an oversight.
+Two consequences are worth knowing. Solution 1 is what §7.6 calls the vertical prototype — the
+thing to build first — and `S1`–`S5` are very nearly its contract without its Fuseki; building
+them is building most of 1 whatever it is later called. Solution 17's n-ary comparison
+(SciREX/ORKG evaluation events joined on compatible conditions) is the one mechanism of the six
+that nothing in the fifteen substitutes for, and `A05`'s condition comparison is the nearest
+thing to it. Neither is a task below; both are decisions for whoever owns the selection.
 
 ---
 
@@ -208,6 +223,197 @@ step registry, as it is for retrieval (`CLAUDE.md`, *Steps not yet written*).
 **Done when** both run over the same frozen pool and their candidate sets are reported side by
 side with what each found that the other did not; neither is the default; a UMAP coordinate is
 nowhere in a candidate's identity.
+
+### [ ] S10. Schema-guided slots, and an open residue beside them
+
+**Source** §3.2 (2, 3), §2.8 (6). **Gap** `build_schema` (`atlas/steps/extract_llm.py`) offers
+the model an enum of class names, a free-form `{string: string}` map for fields, and a quote.
+The design's schema-guided branch is SPIRES/OntoGPT shaped: the slots a class declares, typed,
+with the unit where the value has one, and candidate identifiers offered for the terms already
+known — and **schema retrieval**, so a corpus with a large ontology is shown the classes that
+could apply rather than all of them. Beside it runs an open branch (EDC: extract, define,
+canonicalise) whose subject is what the schema has no room for, and whose output is the
+candidate pool of `S3` rather than a dropped line.
+
+**Where** `atlas/steps/extract_llm.py` (`build_schema`, `_catalogue`); a step of its own for the
+open branch; `docs/architecture.md` on what the model is asked for. Depends on `S1` for the
+typed fields.
+
+**Done when** the reply schema names the slots of each class and refuses a field the class does
+not declare, rather than accepting any string key; a run over a large ontology shows the model a
+bounded set of classes and reports which; the open branch produces candidates with quotes for
+exactly what the schema-guided branch could not record; the model is still never asked for an
+offset (`CLAUDE.md`).
+
+### [ ] S11. A quote that will not bind is quarantined, not dropped
+
+**Source** §3.1, §3.2 (4). **Gap** this one is a behaviour the library will have to change, not
+add. `relocate` drops a statement whose quote cannot be located and counts it, which invariant 1
+requires of the **store** — and the design requires the statement to survive as a quarantined
+record with a review state, because the count alone cannot tell a hallucinated sentence from a
+parser that lost a ligature. A fuzzy match likewise gets a review state and never automatic
+acceptance. The design also requires a statement assembled from several elements to carry
+**several anchors**, which `Evidenced.spans` already allows and nothing produces.
+
+**Where** `atlas/steps/relocate.py`; the quarantine is state, not a store write, so invariant 1
+is untouched — nothing without a span is asserted, and that must stay exactly as it is.
+
+**Done when** an unbindable statement is inspectable with the text that failed and the nearest
+candidate; a fuzzy bind is marked and never asserted without a decision; a statement spanning
+two segments carries both spans; `tests/test_relocate.py` holds that nothing quarantined reaches
+a store.
+
+### [ ] S12. Entity resolution and proposition resolution
+
+**Source** §3.2 (5, 6), §2.7. **Gap** the largest one. `CLAUDE.md` lists canonicalisation of
+nodes across sources among the steps not yet written, and there is no proposition identity at
+all. The design needs both, and keeps them apart: a **Mention** is where something is named, a
+**ScientificEntity** is the thing, and resolving one to the other must not make mentions
+disappear — architecture 4 already holds this for its three identities and nothing else does.
+Proposition identity is normalised participants **and** the relation **and** the quantifier,
+the negation, the conditions, the time and the version; matching text, or matching SPO alone,
+is explicitly not enough. Without it, "two sources agree" cannot be computed, and that is what
+every `supports`/`disputes` count in this library currently rests on.
+
+**Where** two steps under `atlas/steps/`, with `Mention` and the resolution report living beside
+the step that defines them (`CLAUDE.md`, *A type that crosses a step boundary*); the entity and
+the proposition are asserted, so they are `atlas/model/`'s business.
+
+**Done when** the same method named two ways in two papers is one entity with both mentions
+still reachable; two observations under different conditions are two propositions, not one with
+a conflict; a homonym across two fields is two entities (`A18` depends on this); the identity is
+reported with what it was computed from, so a wrong merge can be found.
+
+### [ ] S13. The format router, and a source that knows its version
+
+**Source** §3.1, §2.7. **Gap** `ingest_pdf`, `ingest_text`, `ingest_table` and
+`ingest_markdown` each read one thing, and the caller picks. The design has a router over them
+with GROBID and Docling as **alternative branches** — and, where both were run on one PDF, two
+parser artifacts kept apart with the coordinate mapping made explicit rather than merged. It
+also fixes what a source records: parser revision, text hash, DOI or another identifier,
+publication date, the original file. `Source.text_hash` and `Source.meta` are the half of that
+which exists.
+
+**Where** a step that routes; `atlas/model/source.py` for the recorded version; the chunking
+policy of §3.1 (sections and paragraphs, a table with its headers, units and caption travelling
+together) belongs to the readers.
+
+**Done when** one input set of mixed formats is read by one configured step; two parsers over
+one PDF produce two sources that can be compared rather than one that silently won; a table's
+value is never separated from its unit and its caption; invariant 2 holds unchanged — the text
+layer is still frozen at ingest.
+
+### [ ] S14. Three kinds of negative, and four sections in the package
+
+**Source** §2.9, §3.4. **Gap** `Bundle` carries what supports, what opposes and `partial`. The
+design requires two more distinctions that collapse without them. First, **not detected**,
+**refuted** and **a negative result** are three different things, and conflating them turns an
+absence of evidence into evidence of absence — different experimental conditions make different
+propositions about observations, which is why `S12` comes first. Second, the generator is handed
+four sections — support, objections, **incomparable conditions**, and **unknown** — and this is
+stated as a requirement of every RAG variant, not of one.
+
+**Where** `atlas/steps/graph_expand.py` (`Bundle`), `atlas/steps/graph_answer.py` for the
+sections, `ontologies/science_core*.ttl` for the three kinds; `docs/architectures/README.md`,
+which states the shared rule.
+
+**Done when** a package distinguishes the three; a result whose conditions cannot be compared is
+in its own section rather than absent or counted as agreement; "unknown" reaches the answer as a
+section and not as silence; `tests/test_catalogue.py` checks the four sections over every
+manifest, as it checks the walk.
+
+### [ ] S15. Every bridge ships a counterexample
+
+**Source** §2.4, §2.8 (5). **Gap** the shipped ontologies reuse BFO, IAO, OBI, ECO, SIO, EVI and
+SEPIO IRIs, which is the import. The bridge is what the design asks for and what is missing: a
+separate module of **verified** links, each with the version it was checked against and the
+ground it was accepted on, and each with a positive example **and a counterexample** — the
+design's own is that a file describing a procedure must not classify as the procedure having
+been performed. A matching label never produces an `equivalentClass`. The section says plainly
+why this is not documentation: the bridge is what decides extraction and retrieval in every
+architecture that uses the scientific profile.
+
+**Where** a bridge module under `ontologies/`, its examples as fixtures,
+`tests/test_ontologies.py`; `docs/ontology.md`, which currently describes `skos:closeMatch` and
+should describe what a bridge is beside it.
+
+**Done when** each bridge link has both examples in the suite; the counterexample fails if the
+link is widened to an equivalence; a bridge is named by a configuration the way shapes are, so
+the release of `S5` can lock it.
+
+### [ ] S16. Assembling an imported ontology, reproducibly
+
+**Source** §2.8, §2.6. **Gap** `load` reads files and follows an `owl:imports` beside the file
+or among the shipped ones; anything else is recorded and not fetched, which is the right
+default and not an assembly. The design's assembly is eight steps, and three of them have no
+equivalent here: a **pinned** import with its file, version, digest, licence and import closure,
+so a release does not depend on a website; **ROBOT extract** with MIREOT and BOT/STAR treated as
+what they are — different methods, not interchangeable ones; and an **expressivity report** on
+what the assembled module actually needs. §2.6 adds that reuse comes in four kinds — a class by
+its IRI, an annotation scheme translated with its provenance, a data template by its id and
+version, an algorithm through an adapter — and that each is recorded in the manifest as the kind
+it is.
+
+**Where** `atlas/ontology/__init__.py` for the pinning; the manifest is the release of `S5`;
+`docs/ontology.md`, *How an ontology is loaded*.
+
+**Done when** a release names every import with its digest and licence and loads with no network
+under any circumstances; an extraction method is named per import rather than assumed; the four
+kinds of reuse are distinguishable in the manifest; the version hash still covers exactly the
+bytes that were read (invariant 3).
+
+### [ ] S17. An aggregate is computed over the eligible set, and a package names its snapshot
+
+**Source** §3.4. **Gap** two sentences of the design that the `Bundle` contract does not yet
+carry. A question that counts — how many studies, how many disagree — must be answered over the
+**full eligible set in the snapshot**, and a top-k retrieval sample is not that; `A20` names the
+same requirement for a plan's aggregates, and it holds for every variant. And the package must
+carry the release and snapshot it was built from, alongside the roots, paths, contexts, anchors
+and selection reasons it already carries, or an answer cannot be replayed.
+
+**Where** `atlas/steps/graph_expand.py` (`Bundle`), every step that produces one, and the
+aggregate path, which does not exist and probably belongs beside `query`.
+
+**Done when** a counting question is answered by a query over the snapshot and not from the
+seeds; the count says what it ranged over; a package names its release; `A20`'s replay has
+something to replay against.
+
+### [ ] S18. The answer contract, and a check that is not a citation check
+
+**Source** §3.5. **Gap** `graph_answer` deletes a sentence whose citation does not resolve and
+`check_answer` reports what the package held and the answer left out — which is the deterministic
+half, and it is good. The design asks for two things beside it: the generator's output is
+`claim + supporting_ids + opposing_ids + **qualifications**`, so a claim that holds only under a
+condition says so structurally rather than in prose; and a **separate semantic check** asks
+whether the wording follows from the grounds, because a resolving identifier does not prove it
+does. Refusal and the negative cases are part of what is measured, not a failure to answer.
+
+**Where** `atlas/steps/graph_answer.py`, `atlas/steps/check_answer.py`; `docs/evaluation.md`,
+which is where refusal has to become a measured outcome.
+
+**Done when** a qualification is a field and not a sentence; a claim whose grounds do not entail
+it is reported even though every identifier resolves; an honest refusal scores as such.
+
+### [ ] S19. The acceptance suite of §7.5
+
+**Source** §7.5, §7.1. **Gap** the suite here checks the library. The design's acceptance is
+thirteen named trials over the *contract*, and most of them have no test: the five components
+traversable in any accepted record; imported IRIs unrenamed across a release; a new question
+distinguishing a schema gap from missing data from a retrieval error; negative evidence reaching
+the package; two different contexts not merged into one proposition; an RBox change producing no
+illegal cross-context transitivity; a computation error finding its dependents without deleting
+history; a repeated document adding no independent support; old containers and anchors still
+verifying under a new schema and a new parser; the export preserving the profile and the
+provenance. Beside them, four negative controls — a lost negation, a substituted quote, a
+duplicated source, a wrong mapping — each of which must **drop** the metric, and a dev/test
+split of the question sets with training a critic or a retriever on the test half forbidden.
+
+**Where** a test module of its own; `docs/evaluation.md` gains the table. `CLAUDE.md` already
+says a metric without its cases is worthless, and this is that rule's suite.
+
+**Done when** each of the thirteen is a named test that fails when its mechanism is removed; each
+negative control measurably drops the metric it is aimed at; the split is enforced rather than
+documented.
 
 ---
 
@@ -428,11 +634,38 @@ moved witnesses; the static plan stays the control it is.
 
 ## Order
 
-`S1` → `S2` → `S3` → `S4` → `S5` → `S6`, then `S7`–`S9` in any order, then the `A` tasks. This
-is the source's own order (§7.6: the five components, then the container, then the accumulator
-and the release cycle, then the specialised executions), and it is also the only order in which
-the `A` tasks are small: nine of the fifteen are a few hundred lines once a release and a
-dependency index exist, and all fifteen are unbounded before that.
+Three groups, and the order inside each matters more than the order between them.
 
-`A00` can be done at any point and is worth doing early — it is a test, and it is the thing that
-makes every later comparison mean something.
+**The build path first**, because every later count rests on it: `S13` → `S10` → `S11` → `S12`.
+Resolution (`S12`) is the one with no partial version — until a mention resolves to an entity and
+a proposition has an identity, "two sources agree" is a string comparison, and every support
+count, every independence check in `A13` and every homonym test in `A18` is measuring something
+else. `S1` belongs here too, since `S10`'s typed slots are its fields.
+
+**Then the record and the cycle:** `S15` → `S16` → `S2` → `S3` → `S4` → `S5` → `S6`, with `S7`,
+`S8` and `S9` after `S3` in any order. This is the design's own sequence (§7.6: the five
+components, then the container, then the accumulator and the release cycle), and `S15` leads it
+because a bridge that was never checked is what a container would then publish.
+
+**Then what the answer owes:** `S14`, `S17`, `S18` — small next to the rest, and each one a
+change to the shared `Bundle` contract, so they are cheapest before fifteen architectures are
+rewritten on top of it.
+
+`S19` is written **as the others land**, one trial at a time, not at the end. A suite written
+afterwards tests what was built rather than what was asked for, which is how the fidelity gap
+being closed here appeared in the first place.
+
+The `A` tasks come after all of it. Nine of the fifteen are a few hundred lines once a release
+and a dependency index exist, and all fifteen are unbounded before that. `A00` is the exception
+and is worth doing first: it is a test, and it is what makes every later comparison mean
+something.
+
+## What this list does not claim
+
+That finishing it produces the twenty architectures of the design. It produces fifteen of them,
+to the contracts the design states, on a library that holds its own invariants. The six that are
+absent (§*What is not here at all*), the platform's half of every task marked with a line, and
+the corpus these are supposed to be measured over are all outside this file. A task closed here
+is a mechanism that works and is tested; it is not evidence that the architecture built on it
+answers a scientific question better than the control. That evidence is `docs/evaluation.md`'s
+to produce, over a corpus, after `S19`.
