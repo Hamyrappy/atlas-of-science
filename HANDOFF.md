@@ -14,6 +14,11 @@ has quietly stopped being true is worse than none, because the next agent will t
 
 ## 1. Where the work stands
 
+`TASKS.md` is what is open, against the design this library implements: the shared
+contracts it does not yet have -- the nanopublication container and the evolution cycle --
+and what each architecture owes on top of them. This section is the state those tasks
+start from.
+
 Fifteen architectures ship, each as a manifest under `architectures/` with a specification under
 `docs/architectures/`. `atlas variants` lists them with the OWL 2 profile each names and the
 engines each runs; `tests/test_catalogue.py` checks every one of them loads, resolves, runs its
