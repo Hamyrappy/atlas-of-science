@@ -667,5 +667,12 @@ to the contracts the design states, on a library that holds its own invariants. 
 absent (§*What is not here at all*), the platform's half of every task marked with a line, and
 the corpus these are supposed to be measured over are all outside this file. A task closed here
 is a mechanism that works and is tested; it is not evidence that the architecture built on it
-answers a scientific question better than the control. That evidence is `docs/evaluation.md`'s
-to produce, over a corpus, after `S19`.
+answers a scientific question better than **architecture 0**, which is what this library means
+by the control when it compares one architecture against another. That evidence is
+`docs/evaluation.md`'s to produce, over a corpus, after `S19`.
+
+The word carries three narrower senses elsewhere in this file, and they are not that comparison:
+the four negative controls of `S19`, which must each drop a metric; the unlearned selector `A16`
+falls back to; and the static plan `A20` measures a planner against. Those compare two ways of
+doing one thing inside one architecture. Architecture 0 is the one that compares architectures,
+which is the only reason it ships.
