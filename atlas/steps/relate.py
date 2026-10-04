@@ -47,8 +47,24 @@ class Relation(BaseModel):
     quote: str
 
 
+class RelationViolation(BaseModel):
+    """The predicate and endpoint types of one placed relation the schema refused.
+
+    `relation_violations` keeps its detailed, human-readable rule messages. This parallel
+    value keeps the stable grouping keys a run needs: parsing type names back out of prose
+    would couple the run ledger to wording that exists for people, not storage.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    predicate: str
+    source_type: str
+    target_type: str
+
+
 @register("relate", requires=("sources", "nodes", "relations", "schema"),
-          produces=("links", "unrelated", "relation_violations"), options=Nothing)
+          produces=("links", "unrelated", "relation_violations", "relation_violation_pairs"),
+          options=Nothing)
 def relate(state: State) -> State:
     """Place every claimed relation and mint a link for each one the ontology accepts."""
     sources: dict[str, Source] = {source.id: source for source in state["sources"]}
@@ -57,6 +73,7 @@ def relate(state: State) -> State:
     links: dict[str, Link] = {}
     unrelated = 0
     violations: list[str] = []
+    violation_pairs: list[RelationViolation] = []
     for relation in state["relations"]:
         source = sources.get(relation.source_id)
         src, dst = nodes.get(relation.src_ref), nodes.get(relation.dst_ref)
@@ -80,7 +97,13 @@ def relate(state: State) -> State:
         problems = schema.validate_link(link, src.type, dst.type)
         if problems:
             violations += problems
+            violation_pairs.append(RelationViolation(
+                predicate=relation.predicate,
+                source_type=src.type,
+                target_type=dst.type,
+            ))
             continue
         links.setdefault(link.id, link)
     return {"links": tuple(links.values()), "unrelated": unrelated,
-            "relation_violations": tuple(violations)}
+            "relation_violations": tuple(violations),
+            "relation_violation_pairs": tuple(violation_pairs)}

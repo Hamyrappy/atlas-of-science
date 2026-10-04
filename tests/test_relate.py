@@ -106,6 +106,10 @@ def test_a_relation_the_pack_forbids_between_those_types_is_reported(tmp_path: P
     assert result["links"] == ()
     # Not a count: the case is what makes the number worth anything.
     assert "expects domain 'Observation'" in result["relation_violations"][0]
+    [pair] = result["relation_violation_pairs"]
+    assert (pair.predicate, pair.source_type, pair.target_type) == (
+        "recorded_with", "Instrument", "Observation"
+    )
 
 
 def test_an_unknown_predicate_is_reported_rather_than_minted(tmp_path: Path) -> None:
@@ -113,6 +117,10 @@ def test_an_unknown_predicate_is_reported_rather_than_minted(tmp_path: Path) -> 
 
     assert result["links"] == ()
     assert "unknown predicate 'caused'" in result["relation_violations"][0]
+    [pair] = result["relation_violation_pairs"]
+    assert (pair.predicate, pair.source_type, pair.target_type) == (
+        "caused", "Observation", "Instrument"
+    )
 
 
 def test_the_same_relation_claimed_twice_is_one_link(tmp_path: Path) -> None:
@@ -131,4 +139,6 @@ def test_a_configured_run_extracts_relates_and_asserts_links(
     # The stub relates each node of a segment to the next, and only one of the two
     # orderings satisfies the pack, so the run keeps what the pack allows and no more.
     assert [link.predicate for link in state["links"]] in ([], ["recorded_with"])
-    assert set(state).issuperset({"links", "unrelated", "relation_violations"})
+    assert set(state).issuperset({
+        "links", "unrelated", "relation_violations", "relation_violation_pairs"
+    })

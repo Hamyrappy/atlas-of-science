@@ -179,7 +179,9 @@ corpus is how you find out what it bought.
 
 - **The relation set is thin.** Seven predicates over six types leave most of a paper
   unsaid, and `relate` will refuse a great deal. That is visible in
-  `relation_violations`, and reading those is the first thing to do on a new corpus.
+  `relation_violations`; the parallel `relation_violation_pairs` records each placed
+  refusal by predicate and endpoint types. Reading both is the first thing to do on a new
+  corpus.
 - **`compare` is not "better than".** The scheme is explicit about this and so is the
   ontology; an answer that turns a comparison into a ranking is the failure to watch for.
 - **A mention is not an entity.** Nothing here resolves coreference, so two pages that

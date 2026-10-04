@@ -165,7 +165,7 @@ generated from the live registry.
 | `salience_llm` | `sources`, `client` | `statements`, `kept`, `tokens`, `cached_replies` | `atlas/steps/salience.py` |
 | `relocate` | `sources`, `statements`, `schema` | `nodes`, `unplaced`, `needs_review` | `atlas/steps/relocate.py` |
 | `relate_llm` | `sources`, `nodes`, `schema`, `client` | `relations`, `malformed_relations`, `tokens`, `cached_replies` | `atlas/steps/relate_llm.py` |
-| `relate` | `sources`, `nodes`, `relations`, `schema` | `links`, `unrelated`, `relation_violations` | `atlas/steps/relate.py` |
+| `relate` | `sources`, `nodes`, `relations`, `schema` | `links`, `unrelated`, `relation_violations`, `relation_violation_pairs` | `atlas/steps/relate.py` |
 | `map_rows` | `sources`, `schema` | `nodes`, `links`, `unmapped`, `mapping_violations` | `atlas/steps/map_rows.py` |
 | `validate` | `nodes`, `schema` | `nodes`, `violations` | `atlas/steps/validate.py` |
 | `critique` | `nodes`, `schema` | `findings` | `atlas/steps/critique.py` |
