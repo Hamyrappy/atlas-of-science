@@ -615,7 +615,12 @@ is kept as a fixture.
 shortcut is excluded with the reason and the fixture is in the suite; a released edge type
 changes the templates only after its regression passes.
 
-### [ ] A20. A new question is diagnosed before anything is changed
+### [~] A20. A new question is diagnosed before anything is changed - in progress 2026-10-06
+
+Strict execution is implemented as an opt-in library contract: declared field/class
+flow checks, unsupported-operator refusal, budgets without sampled counts, canonical
+identity arguments, exact zero counts and filter exclusions. Dynamic planning, mapping/
+data diagnosis and persisted replay remain open; the static plan remains the control.
 
 **Source** *Решение 20.* **Gap** `execute_plan` runs a plan written in the configuration, which
 the specification calls the control, and the source agrees. What is missing is the diagnosis the

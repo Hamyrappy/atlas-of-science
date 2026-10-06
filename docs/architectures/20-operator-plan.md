@@ -195,3 +195,23 @@ accepting its output safe rather than hopeful, and is the reason the seam is the
 | The rewriting | `atlas/reason/ql.py` (`rewrite`, `directed`, `to_sql`); `atlas/steps/query.py` (`answer`) |
 | Manifest | `architectures/a20.yaml` |
 | Tests | `tests/test_plan.py`, `tests/test_ql.py` |
+
+## 10. Strict contracts for generated plans
+
+`PlanOptions(strict=True)` is an opt-in execution contract. The shipped static plan
+retains its original baseline mode. A strict plan starts with a declared class, checks
+class flow through relation endpoints and inherited fields, refuses unused arguments,
+and normalises class/relation identities before execution. `join` and `oppose` are
+operator gaps in this mode: the baseline aliases do not implement their stronger contracts.
+
+Operator count and graph/node/link limits refuse with `PlanRefused`, never return a
+truncated aggregate. The graph is read to check its size; stores that eagerly return
+all rows still allocate that read before the interpreter can refuse it. This is an
+execution bound, not a database scan or memory bound. An empty aggregate is exactly zero.
+Each filter records its full input and excluded ids; traversal records its witness links.
+`PlanRefused.category` distinguishes schema, operator and budget failures.
+
+`tests/test_plan_strict.py` covers composition, rejection before graph reads, inherited
+field and endpoint checks, identity normalisation, zero counts, budgets and append-only
+store preservation. Dynamic planning, saved-plan replay and mapping/data diagnosis
+remain A20 work; these contracts alone do not complete that architecture.

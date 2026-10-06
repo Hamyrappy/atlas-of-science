@@ -12,6 +12,7 @@ ontologies moved to Turtle, and it loads to the same vocabulary.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -202,7 +203,7 @@ def test_a_pack_is_found_beside_the_file_that_named_it_or_from_the_working_direc
 
 
 def test_a_pack_that_is_nowhere_says_where_it_was_looked_for(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError, match="corpus/pack.yaml"):
+    with pytest.raises(FileNotFoundError, match=re.escape(str(Path("corpus") / "pack.yaml"))):
         resolve("corpus/pack.yaml", tmp_path)
 
 

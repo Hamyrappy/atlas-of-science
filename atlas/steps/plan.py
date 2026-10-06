@@ -44,11 +44,13 @@ operator that could.
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
+from itertools import islice
 from typing import Literal
 
 from pydantic import Field
 
 from atlas.model import Frozen, Node, Schema
+from atlas.model.owl import TOP
 from atlas.reason.ql import Atom, Query, TBox, directed, rewrite, tbox
 from atlas.steps import State, register
 from atlas.steps.graph_expand import GraphExpandOptions, expand
@@ -97,6 +99,8 @@ class Executed(Frozen):
         default=(), description="What the ontology rewrote the operator into, as queries"
     )
     reason: str = ""
+    inputs: tuple[str, ...] = ()
+    excluded: tuple[str, ...] = ()
 
     def __len__(self) -> int:
         return len(self.nodes)
@@ -129,6 +133,18 @@ class PlanOptions(Frozen):
     limit: int = Field(500, gt=0, description="Nodes an operator may carry forward")
     sql: bool = Field(True, description="Run a rewritten resolve in the store where it can")
     expand: GraphExpandOptions = GraphExpandOptions()
+    strict: bool = False
+    max_steps: int = Field(16, gt=0, le=128)
+    max_graph_nodes: int = Field(100000, gt=0)
+    max_graph_links: int = Field(200000, gt=0)
+
+
+class PlanRefused(ValueError):
+    """A strict plan cannot be executed under its declared contracts."""
+
+    def __init__(self, category: Literal["schema", "operator", "budget"], reason: str) -> None:
+        self.category = category
+        super().__init__(reason)
 
 
 @register("execute_plan", requires=("store", "schema"),
@@ -137,6 +153,8 @@ def execute_plan(state: State, options: PlanOptions) -> State:
     """Check the plan against the ontology, run it, and package what the last step selected."""
     store = state["store"]
     schema: Schema = state["schema"]
+    if options.strict:
+        _strict_checked(options, schema)
     problems = check(options.plan, schema)
     if problems:
         raise ValueError(f"the plan does not type-check: {'; '.join(problems)}")
@@ -184,15 +202,34 @@ def check(plan: Sequence[Operator], schema: Schema) -> list[str]:
 
 def run(store, schema: Schema, options: PlanOptions, seeds: Iterable = ()) -> Trace:
     """Execute a checked plan, carrying a set of nodes from one operator to the next."""
-    held = {node.id: node for node in store.nodes()}
-    adjacency = Adjacency.of(store.links())
+    plan = options.plan
+    if options.strict:
+        _strict_checked(options, schema)
+        plan = tuple(_canonical(operator, schema) for operator in plan)
+        nodes = tuple(islice(iter(store.nodes()), options.max_graph_nodes + 1))
+        if len(nodes) > options.max_graph_nodes:
+            raise PlanRefused("budget", "the graph exceeds the node budget")
+        links = tuple(islice(iter(store.links()), options.max_graph_links + 1))
+        if len(links) > options.max_graph_links:
+            raise PlanRefused("budget", "the graph exceeds the link budget")
+    else:
+        nodes, links = store.nodes(), store.links()
+    held = {node.id: node for node in nodes}
+    adjacency = Adjacency.of(links)
     t = tbox(schema.every_axiom())
     carried: tuple[str, ...] = tuple(hit.node.id for hit in seeds)
     steps: list[Executed] = []
     partial = False
-    for operator in options.plan:
+    for operator in plan:
         step = _apply(operator, carried, held, adjacency, schema, _Access(store, t, options.sql))
+        step = step.model_copy(update={
+            "inputs": carried,
+            "excluded": tuple(node_id for node_id in carried if node_id not in step.nodes)
+            if operator.op == "filter" else (),
+        })
         if len(step.nodes) > options.limit:
+            if options.strict:
+                raise PlanRefused("budget", f"{operator.describe()} exceeds the node budget")
             # A budget that bound is not a smaller answer: it is the same answer with a
             # warning on it, and the count above it is marked partial for the same reason.
             step = step.model_copy(update={"nodes": step.nodes[:options.limit],
@@ -201,6 +238,91 @@ def run(store, schema: Schema, options: PlanOptions, seeds: Iterable = ()) -> Tr
         steps.append(step)
         carried = step.nodes
     return Trace(steps=tuple(steps), partial=partial)
+
+
+def _canonical(operator: Operator, schema: Schema) -> Operator:
+    """Use vocabulary names after checking identities, including CURIE arguments."""
+    type_def = schema.find_type(operator.type) if operator.type else None
+    predicate = schema.find_predicate(operator.predicate) if operator.predicate else None
+    return operator.model_copy(update={
+        "type": type_def.name if type_def else operator.type,
+        "predicate": predicate.name if predicate else operator.predicate,
+    })
+
+
+def _strict_checked(options: PlanOptions, schema: Schema) -> None:
+    if len(options.plan) > options.max_steps:
+        raise PlanRefused("budget", "the plan exceeds the operator budget")
+    if any(operator.op in ("join", "oppose") for operator in options.plan):
+        raise PlanRefused("operator", "join and oppose have no strict execution contract")
+    problems = check_strict(options.plan, schema)
+    if problems:
+        raise PlanRefused("schema", "; ".join(problems))
+
+
+def check_strict(plan: Sequence[Operator], schema: Schema) -> list[str]:
+    """Check a closed operator language and its possible class flow without reading data.
+
+    Strict plans start from a declared class, never from retrieval's sampled seeds.
+    Field operations require a field on every possible carried class. A class filter
+    can narrow that set first. Join and opposition remain baseline operators until
+    their stronger contracts have implementations of their own.
+    """
+    problems = check(plan, schema)
+    if not plan or plan[0].op != "resolve":
+        problems.append("a strict plan must start with resolve")
+    possible: set[str] = set()
+    allowed = {
+        "resolve": {"type", "terms"},
+        "traverse": {"predicate", "forward"},
+        "filter": {"type", "field", "value"},
+        "aggregate": set(),
+        "compare": {"field"},
+    }
+    for index, raw in enumerate(plan):
+        operator = _canonical(raw, schema)
+        where = f"step {index + 1}, {operator.describe()}"
+        if operator.op not in allowed:
+            problems.append(f"{where}: no strict contract for this operator")
+            continue
+        defaults = Operator(op=operator.op)
+        for name in ("type", "predicate", "field", "value", "terms", "forward"):
+            if name not in allowed[operator.op] and getattr(raw, name) != getattr(defaults, name):
+                problems.append(f"{where}: unused argument {name!r}")
+        if operator.op == "resolve":
+            if not operator.type:
+                problems.append(f"{where}: needs a declared class")
+            possible = {one.name for one in schema.types if schema.is_a(one.name, operator.type)}
+        elif operator.op == "traverse":
+            predicate = schema.find_predicate(operator.predicate)
+            if predicate is None:
+                possible = set()
+                continue
+            domain, range_ = (predicate.domain, predicate.range) if operator.forward else (
+                predicate.range, predicate.domain
+            )
+            if domain != TOP:
+                wrong = sorted(name for name in possible if not schema.is_a(name, domain))
+                if wrong:
+                    problems.append(f"{where}: relation endpoint does not admit {wrong!r}")
+            possible = {one.name for one in schema.types
+                        if range_ == TOP or schema.is_a(one.name, range_)}
+        elif operator.op in ("filter", "compare"):
+            if operator.type:
+                narrowed = {name for name in possible if schema.is_a(name, operator.type)}
+                if possible and not narrowed:
+                    problems.append(f"{where}: class filter is incompatible with the carried set")
+                possible = narrowed
+            if not operator.field:
+                if operator.op == "compare":
+                    problems.append(f"{where}: needs a field to compare")
+                continue
+            wrong = sorted(name for name in possible if operator.field not in {
+                field.name for field in schema.declared_fields(name)
+            })
+            if wrong:
+                problems.append(f"{where}: field {operator.field!r} is not declared on {wrong!r}")
+    return problems
 
 
 class _Access:
@@ -222,7 +344,8 @@ def _apply(
     if operator.op == "resolve":
         return _resolve(operator, held, schema, access)
     if not carried:
-        return Executed(operator=operator, reason="nothing reached this step")
+        return Executed(operator=operator, count=0 if operator.op == "aggregate" else None,
+                        reason="nothing reached this step")
     if operator.op in ("traverse", "join", "oppose"):
         return _traverse(operator, carried, adjacency, access.t)
     if operator.op == "filter":

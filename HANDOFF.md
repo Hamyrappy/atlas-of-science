@@ -14,6 +14,15 @@ has quietly stopped being true is worse than none, because the next agent will t
 
 ## 1. Where the work stands
 
+**Strict plan execution, 2026-10-06.** The platform requested an upstream execution
+contract for generated A20 plans. `PlanOptions(strict=True)` checks fields and class
+flow, refuses unsupported strict operators/unused arguments and budget overflow,
+canonicalises identity arguments, and keeps filter input/excluded ids. Empty aggregates
+return zero. Static configurations retain their baseline mode. A20 remains open for
+dynamic planning, diagnosis and saved-plan replay. See `tests/test_plan_strict.py` and
+the architecture document's strict-contract section.
+
+
 `TASKS.md` is what is open, against the design this library implements: the shared
 contracts it does not yet have -- the nanopublication container and the evolution cycle --
 and what each architecture owes on top of them. This section is the state those tasks
