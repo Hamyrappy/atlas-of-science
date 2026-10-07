@@ -622,7 +622,9 @@ flow checks, unsupported-operator refusal, budgets without sampled counts, canon
 identity arguments, exact zero counts and filter exclusions. Strict Join now preserves
 anchors and all matched pairs with endpoint/field checks; strict opposition walks a full
 configured opposing component with both sides and original witnesses. Static aliases stay
-the control. The platform supplies generated planning, exact-answer tables and persisted
+the control. Strict full-graph Resolve and `aggregate.value: sources` now provide exact
+distinct-source counts with full source-to-node witnesses, without sampled document counts.
+The platform supplies generated planning, exact-answer tables and persisted
 schema-release replay. Mapping/data diagnosis and CQ proposal feedback remain open here.
 
 **Source** *Решение 20.* **Gap** `execute_plan` runs a plan written in the configuration, which

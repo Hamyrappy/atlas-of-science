@@ -199,7 +199,8 @@ accepting its output safe rather than hopeful, and is the reason the seam is the
 ## 10. Strict contracts for generated plans
 
 `PlanOptions(strict=True)` is an opt-in execution contract. The shipped static plan
-retains its original baseline mode. A strict plan starts with a declared class, checks
+retains its original baseline mode. A strict plan starts with a declared class or the
+complete graph when Resolve's type is empty, checks
 class flow through relation endpoints and inherited fields, refuses unused arguments,
 and normalises class/relation identities before execution.
 
@@ -222,6 +223,12 @@ Operator count and graph/node/link limits refuse with `PlanRefused`, never retur
 truncated aggregate. The graph is read to check its size; stores that eagerly return
 all rows still allocate that read before the interpreter can refuse it. This is an
 execution bound, not a database scan or memory bound. An empty aggregate is exactly zero.
+Strict Aggregate's default or `value: nodes` counts selected nodes. `value: sources`
+counts distinct original source ids from every selected node's spans and records
+source-to-node groups, so multiple cards or spans never multiply a document. This is
+a source population, not an independence/source-family judgement. Other population
+names refuse. Full-graph Resolve carries every declared class for downstream field
+and endpoint checks; a heterogeneous population must be narrowed before a typed walk.
 Each filter records its full input and excluded ids; traversal records its witness links.
 `PlanRefused.category` distinguishes schema, operator and budget failures.
 

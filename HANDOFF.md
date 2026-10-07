@@ -14,6 +14,14 @@ has quietly stopped being true is worse than none, because the next agent will t
 
 ## 1. Where the work stands
 
+**Exact source populations, 2026-10-07.** Strict Resolve with no class selects the
+complete bounded graph and carries every possible declared class for later checks.
+Strict Aggregate accepts `value: sources` and counts distinct original source ids
+from all selected nodes' verbatim spans. Groups retain source-to-node witnesses;
+repeated cards or spans do not multiply a source. Empty populations are exactly zero.
+Default/`nodes` aggregates still count nodes; other populations refuse. The platform
+must version this added contract and refuse these forms under older saved contracts.
+
 **Strict Join and opposition, 2026-10-07.** Strict plans now support an anchor-preserving
 relation semijoin with full matched pairs in `Executed.groups`, exclusions and witnesses.
 The matched side has its own class/field checks and the output retains anchor class flow;

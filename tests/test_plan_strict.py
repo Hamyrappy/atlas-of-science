@@ -32,7 +32,8 @@ def test_a_composition_keeps_filter_inputs_exclusions_and_relation_witnesses(sci
 
 @pytest.mark.parametrize("plan, reason", [
     ((), "start with resolve"),
-    ((Operator(op="resolve"),), "needs a declared class"),
+    ((Operator(op="resolve"), Operator(op="aggregate", value="unknown")),
+     "unsupported aggregate population"),
     ((Operator(op="resolve", type="StudyResult"),
       Operator(op="filter", field="absent")), "not declared"),
     ((Operator(op="resolve", type="StudyResult"),
@@ -106,6 +107,40 @@ def test_a_strict_execution_does_not_assert_anything(science: Fixture):
         Operator(op="resolve", type="StudyResult"), Operator(op="aggregate"),
     ))
     assert tuple(science.store.assertions()) == before
+
+
+def test_source_aggregate_deduplicates_all_verbatim_spans_and_preserves_node_witnesses(
+    science: Fixture,
+):
+    trace = run(science.store, science.schema, options(
+        Operator(op="resolve"), Operator(op="aggregate", value="sources"),
+    ))
+    population = trace.steps[0].nodes
+    expected: dict[str, set[str]] = {}
+    held = {node.id: node for node in science.store.nodes()}
+    for node_id in population:
+        for span in held[node_id].spans:
+            expected.setdefault(span.source_id, set()).add(node_id)
+    result = trace.steps[1]
+    assert len(population) > len(expected)
+    assert result.count == len(expected)
+    assert result.nodes == population
+    assert result.groups == {key: tuple(sorted(nodes)) for key, nodes in sorted(expected.items())}
+
+
+def test_source_aggregate_of_an_empty_selection_is_exact_zero(science: Fixture):
+    trace = run(science.store, science.schema, options(
+        Operator(op="resolve", terms=("no-such-text",)),
+        Operator(op="aggregate", value="sources"),
+    ))
+    assert trace.steps[-1].count == 0
+    assert trace.steps[-1].groups == {}
+
+
+def test_full_graph_resolution_preserves_class_flow_checks(science: Fixture):
+    problems = check_strict((Operator(op="resolve"),
+                            Operator(op="filter", field="value")), science.schema)
+    assert problems
 
 
 def test_join_keeps_anchors_with_matching_objects_and_their_pairs(science: Fixture):

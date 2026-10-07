@@ -268,7 +268,7 @@ def _strict_checked(options: PlanOptions, schema: Schema) -> None:
 def check_strict(plan: Sequence[Operator], schema: Schema) -> list[str]:
     """Check a closed operator language and its possible class flow without reading data.
 
-    Strict plans start from a declared class, never from retrieval's sampled seeds.
+    Strict plans start from a declared class or the full graph, never sampled seeds.
     Field operations require a field on every possible carried class. A class filter
     can narrow that set first. A join preserves anchors and checks the matched side;
     opposition admits both endpoints and preserves the complete opposing component.
@@ -281,7 +281,7 @@ def check_strict(plan: Sequence[Operator], schema: Schema) -> list[str]:
         "resolve": {"type", "terms"},
         "traverse": {"predicate", "forward"},
         "filter": {"type", "field", "value"},
-        "aggregate": set(),
+        "aggregate": {"value"},
         "compare": {"field"},
         "join": {"predicate", "forward", "type", "field", "value"},
         "oppose": {"predicate"},
@@ -297,9 +297,11 @@ def check_strict(plan: Sequence[Operator], schema: Schema) -> list[str]:
             if name not in allowed[operator.op] and getattr(raw, name) != getattr(defaults, name):
                 problems.append(f"{where}: unused argument {name!r}")
         if operator.op == "resolve":
-            if not operator.type:
-                problems.append(f"{where}: needs a declared class")
-            possible = {one.name for one in schema.types if schema.is_a(one.name, operator.type)}
+            possible = {one.name for one in schema.types
+                        if not operator.type or schema.is_a(one.name, operator.type)}
+        elif operator.op == "aggregate":
+            if operator.value not in ("", "nodes", "sources"):
+                problems.append(f"{where}: unsupported aggregate population {operator.value!r}")
         elif operator.op in ("traverse", "join", "oppose"):
             predicate = schema.find_predicate(operator.predicate)
             if predicate is None:
@@ -391,6 +393,13 @@ def _apply(
     if operator.op == "filter":
         return _filter(operator, carried, held, schema)
     if operator.op == "aggregate":
+        if access.strict and operator.value == "sources":
+            groups: dict[str, set[str]] = {}
+            for node_id in carried:
+                for span in held[node_id].spans:
+                    groups.setdefault(span.source_id, set()).add(node_id)
+            return Executed(operator=operator, nodes=carried, count=len(groups),
+                groups={key: tuple(sorted(nodes)) for key, nodes in sorted(groups.items())})
         return Executed(operator=operator, nodes=carried, count=len(carried))
     return _compare(operator, carried, held)
 
