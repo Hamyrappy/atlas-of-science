@@ -201,8 +201,22 @@ accepting its output safe rather than hopeful, and is the reason the seam is the
 `PlanOptions(strict=True)` is an opt-in execution contract. The shipped static plan
 retains its original baseline mode. A strict plan starts with a declared class, checks
 class flow through relation endpoints and inherited fields, refuses unused arguments,
-and normalises class/relation identities before execution. `join` and `oppose` are
-operator gaps in this mode: the baseline aliases do not implement their stronger contracts.
+and normalises class/relation identities before execution.
+
+Strict `join` is an anchor-preserving relation semijoin. It checks the opposite endpoint's
+optional class and field/value, keeps each matching anchor once, records every matched
+anchor/object pair in `groups`, and records every traversed relation witness and excluded
+anchor. Its following aggregate counts anchors, not pairs. Reverse joins use the declared
+relation direction and QL rewriting. It differs from `traverse`, which replaces anchors
+with their neighbours.
+
+Strict `oppose` requires a relation explicitly named in `expand.opposes`. It walks that
+relation's complete component in both directions, including declared subproperties and
+inverses, retains the anchors and both sides, and records all original relation witnesses.
+It asserts no symmetric relation or new fact and does not decide which side is true. A
+closure exceeding the node budget is refused during expansion. Its possible class flow
+includes both relation endpoints; incompatible downstream fields are refused. The static
+baseline keeps the original aliases and their results.
 
 Operator count and graph/node/link limits refuse with `PlanRefused`, never return a
 truncated aggregate. The graph is read to check its size; stores that eagerly return
@@ -212,6 +226,6 @@ Each filter records its full input and excluded ids; traversal records its witne
 `PlanRefused.category` distinguishes schema, operator and budget failures.
 
 `tests/test_plan_strict.py` covers composition, rejection before graph reads, inherited
-field and endpoint checks, identity normalisation, zero counts, budgets and append-only
-store preservation. Dynamic planning, saved-plan replay and mapping/data diagnosis
+field and endpoint checks, identity normalisation, zero counts, budgets, join pairs and
+multiplicity, reverse joins, full opposition components/roles and append-only preservation. Dynamic planning, saved-plan replay and mapping/data diagnosis
 remain A20 work; these contracts alone do not complete that architecture.

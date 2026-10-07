@@ -14,6 +14,15 @@ has quietly stopped being true is worse than none, because the next agent will t
 
 ## 1. Where the work stands
 
+**Strict Join and opposition, 2026-10-07.** Strict plans now support an anchor-preserving
+relation semijoin with full matched pairs in `Executed.groups`, exclusions and witnesses.
+The matched side has its own class/field checks and the output retains anchor class flow;
+aggregates count distinct anchors. Strict opposition requires `expand.opposes`, walks the
+whole opposing component in both directions, retains both sides and every original witness,
+and refuses a closure overflow during expansion. This is a walk, not a symmetry assertion
+or a truth verdict. Static aliases retain their original semantics. The platform supplies
+generated planning and persisted replay; mapping diagnosis and CQ feedback remain open.
+
 **Strict plan execution, 2026-10-06.** The platform requested an upstream execution
 contract for generated A20 plans. `PlanOptions(strict=True)` checks fields and class
 flow, refuses unsupported strict operators/unused arguments and budget overflow,

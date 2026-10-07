@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from atlas.model import Agent, Assertion, Link
+from atlas.steps.graph_expand import GraphExpandOptions
 from atlas.steps.plan import Operator, PlanOptions, PlanRefused, check_strict, execute_plan, run
 from conftest import Fixture
 
@@ -89,11 +91,11 @@ def test_strict_plans_canonicalise_class_and_relation_identities(science: Fixtur
     assert result.steps[1].operator.predicate == predicate.name
 
 
-def test_unimplemented_strict_operators_are_operator_gaps(science: Fixture):
+def test_an_opposition_predicate_without_a_configured_role_is_an_operator_gap(science: Fixture):
     with pytest.raises(PlanRefused) as caught:
         run(science.store, science.schema, options(
             Operator(op="resolve", type="StudyResult"),
-            Operator(op="join", predicate="observed_under"),
+            Operator(op="oppose", predicate="observed_under"),
         ))
     assert caught.value.category == "operator"
 
@@ -104,3 +106,126 @@ def test_a_strict_execution_does_not_assert_anything(science: Fixture):
         Operator(op="resolve", type="StudyResult"), Operator(op="aggregate"),
     ))
     assert tuple(science.store.assertions()) == before
+
+
+def test_join_keeps_anchors_with_matching_objects_and_their_pairs(science: Fixture):
+    trace = run(science.store, science.schema, options(
+        Operator(op="resolve", type="StudyResult"),
+        Operator(op="join", predicate="observed_under", type="Context",
+                 field="conditions", value="U1"),
+        Operator(op="aggregate"), Operator(op="compare", field="value"),
+    ))
+    result, context = science.nodes["result-1"].id, science.nodes["u1"].id
+    joined = trace.steps[1]
+    assert joined.nodes == (result,)
+    assert joined.groups == {result: (context,)}
+    assert joined.excluded == (science.nodes["result-2"].id,)
+    assert joined.witnesses == (science.links["result-1-observed_under-u1"].id,)
+    assert trace.steps[2].count == 1
+    assert trace.steps[3].groups == {"0.94": (result,)}
+
+
+def test_join_pair_multiplicity_never_duplicates_an_anchor(science: Fixture):
+    link = Link.of(predicate="observed_under", src=science.nodes["result-1"].id,
+        dst=science.nodes["u2"].id, spans=science.nodes["result-1"].spans,
+        schema_version=science.schema.version)
+    science.store.assert_(Assertion(id="join-extra-link", target=link,
+        agent=Agent(id="fixture", kind="run"), at="2026-10-07T00:00:00Z"))
+    trace = run(science.store, science.schema, options(
+        Operator(op="resolve", type="StudyResult"),
+        Operator(op="join", predicate="observed_under"), Operator(op="aggregate"),
+    ))
+    assert sum(len(one) for one in trace.steps[1].groups.values()) == 3
+    assert len(trace.steps[1].witnesses) == 3
+    assert trace.steps[2].count == 2
+
+
+def test_join_can_match_backwards_and_retains_the_original_class_flow(science: Fixture):
+    trace = run(science.store, science.schema, options(
+        Operator(op="resolve", type="Context"),
+        Operator(op="join", predicate="observed_under", forward=False,
+                 type="StudyResult", field="value", value="0.94"),
+        Operator(op="compare", field="conditions"),
+    ))
+    assert trace.steps[1].nodes == (science.nodes["u1"].id,)
+    assert trace.steps[2].groups == {"u1": (science.nodes["u1"].id,)}
+
+
+@pytest.mark.parametrize("over, reason", [
+    ({"field": "value"}, "matched field"),
+    ({"type": "StudyResult"}, "matched class"),
+    ({"value": "value-without-field"}, "value needs a field"),
+])
+def test_join_checks_its_matched_side_before_reads(science: Fixture, over, reason):
+    class NoReads:
+        def nodes(self):
+            raise AssertionError("an invalid join read graph data")
+
+    with pytest.raises(PlanRefused, match=reason):
+        execute_plan({"store": NoReads(), "schema": science.schema}, options(
+            Operator(op="resolve", type="StudyResult"),
+            Operator(op="join", predicate="observed_under", **over),
+        ))
+
+
+def test_opposition_preserves_both_sides_and_excludes_support_links(science: Fixture):
+    before = tuple(science.store.assertions())
+    trace = run(science.store, science.schema, options(
+        Operator(op="resolve", type="Proposition"),
+        Operator(op="oppose", predicate="disputes"), Operator(op="aggregate"),
+        expand=GraphExpandOptions(opposes=("disputes",)),
+    ))
+    assert set(trace.steps[1].nodes) == {science.nodes["claim"].id,
+                                        science.nodes["line-against"].id}
+    assert trace.steps[1].witnesses == (science.links["line-against-disputes-claim"].id,)
+    assert trace.steps[2].count == 2
+    assert tuple(science.store.assertions()) == before
+
+
+def test_opposition_budget_refuses_instead_of_returning_one_side(science: Fixture):
+    with pytest.raises(PlanRefused, match="opposition closure") as caught:
+        run(science.store, science.schema, options(
+            Operator(op="resolve", type="Proposition"),
+            Operator(op="oppose", predicate="disputes"), Operator(op="aggregate"), limit=1,
+            expand=GraphExpandOptions(opposes=("disputes",)),
+        ))
+    assert caught.value.category == "budget"
+
+
+def test_opposition_role_and_operator_can_use_iris(science: Fixture):
+    iri = science.schema.find_predicate("disputes").iri
+    trace = run(science.store, science.schema, options(
+        Operator(op="resolve", type="Proposition"), Operator(op="oppose", predicate=iri),
+        expand=GraphExpandOptions(opposes=(iri,)),
+    ))
+    assert trace.steps[1].operator.predicate == "disputes"
+    assert len(trace.steps[1].nodes) == 2
+
+
+def test_opposition_is_a_component_walk_instead_of_a_one_hop_alias(science: Fixture):
+    source = science.nodes["line-for"]
+    extra = Link.of(predicate="disputes", src=source.id, dst=science.nodes["claim"].id,
+        spans=source.spans, schema_version=science.schema.version)
+    science.store.assert_(Assertion(id="opposition-extra-link", target=extra,
+        agent=Agent(id="fixture", kind="run"), at="2026-10-07T00:00:00Z"))
+    trace = run(science.store, science.schema, options(
+        Operator(op="resolve", type="EvidenceLine", terms=("no effect",)),
+        Operator(op="oppose", predicate="disputes"),
+        expand=GraphExpandOptions(opposes=("disputes",)),
+    ))
+    assert trace.steps[0].nodes == (science.nodes["line-against"].id,)
+    assert set(trace.steps[1].nodes) == {source.id, science.nodes["claim"].id,
+                                        science.nodes["line-against"].id}
+    assert set(trace.steps[1].witnesses) == {
+        extra.id, science.links["line-against-disputes-claim"].id}
+
+
+def test_an_empty_join_has_zero_aggregate_and_visible_exclusions(science: Fixture):
+    trace = run(science.store, science.schema, options(
+        Operator(op="resolve", type="StudyResult"),
+        Operator(op="join", predicate="observed_under", field="conditions", value="absent"),
+        Operator(op="aggregate"),
+    ))
+    assert trace.emptied_at is trace.steps[1]
+    assert trace.steps[1].excluded == trace.steps[1].inputs
+    assert trace.steps[2].count == 0

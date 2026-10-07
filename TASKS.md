@@ -619,8 +619,11 @@ changes the templates only after its regression passes.
 
 Strict execution is implemented as an opt-in library contract: declared field/class
 flow checks, unsupported-operator refusal, budgets without sampled counts, canonical
-identity arguments, exact zero counts and filter exclusions. Dynamic planning, mapping/
-data diagnosis and persisted replay remain open; the static plan remains the control.
+identity arguments, exact zero counts and filter exclusions. Strict Join now preserves
+anchors and all matched pairs with endpoint/field checks; strict opposition walks a full
+configured opposing component with both sides and original witnesses. Static aliases stay
+the control. The platform supplies generated planning, exact-answer tables and persisted
+schema-release replay. Mapping/data diagnosis and CQ proposal feedback remain open here.
 
 **Source** *Решение 20.* **Gap** `execute_plan` runs a plan written in the configuration, which
 the specification calls the control, and the source agrees. What is missing is the diagnosis the

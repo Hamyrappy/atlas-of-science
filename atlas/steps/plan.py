@@ -43,6 +43,7 @@ operator that could.
 
 from __future__ import annotations
 
+from collections import deque
 from collections.abc import Iterable, Sequence
 from itertools import islice
 from typing import Literal
@@ -221,11 +222,12 @@ def run(store, schema: Schema, options: PlanOptions, seeds: Iterable = ()) -> Tr
     steps: list[Executed] = []
     partial = False
     for operator in plan:
-        step = _apply(operator, carried, held, adjacency, schema, _Access(store, t, options.sql))
+        step = _apply(operator, carried, held, adjacency, schema,
+                      _Access(store, t, options.sql, strict=options.strict, limit=options.limit))
         step = step.model_copy(update={
             "inputs": carried,
             "excluded": tuple(node_id for node_id in carried if node_id not in step.nodes)
-            if operator.op == "filter" else (),
+            if operator.op == "filter" or (options.strict and operator.op == "join") else (),
         })
         if len(step.nodes) > options.limit:
             if options.strict:
@@ -253,11 +255,14 @@ def _canonical(operator: Operator, schema: Schema) -> Operator:
 def _strict_checked(options: PlanOptions, schema: Schema) -> None:
     if len(options.plan) > options.max_steps:
         raise PlanRefused("budget", "the plan exceeds the operator budget")
-    if any(operator.op in ("join", "oppose") for operator in options.plan):
-        raise PlanRefused("operator", "join and oppose have no strict execution contract")
     problems = check_strict(options.plan, schema)
     if problems:
         raise PlanRefused("schema", "; ".join(problems))
+    opposing = {predicate.name for name in options.expand.opposes
+                if (predicate := schema.find_predicate(name)) is not None}
+    if any(operator.op == "oppose" and _canonical(operator, schema).predicate not in opposing
+           for operator in options.plan):
+        raise PlanRefused("operator", "opposition needs a predicate declared by expand.opposes")
 
 
 def check_strict(plan: Sequence[Operator], schema: Schema) -> list[str]:
@@ -265,8 +270,8 @@ def check_strict(plan: Sequence[Operator], schema: Schema) -> list[str]:
 
     Strict plans start from a declared class, never from retrieval's sampled seeds.
     Field operations require a field on every possible carried class. A class filter
-    can narrow that set first. Join and opposition remain baseline operators until
-    their stronger contracts have implementations of their own.
+    can narrow that set first. A join preserves anchors and checks the matched side;
+    opposition admits both endpoints and preserves the complete opposing component.
     """
     problems = check(plan, schema)
     if not plan or plan[0].op != "resolve":
@@ -278,6 +283,8 @@ def check_strict(plan: Sequence[Operator], schema: Schema) -> list[str]:
         "filter": {"type", "field", "value"},
         "aggregate": set(),
         "compare": {"field"},
+        "join": {"predicate", "forward", "type", "field", "value"},
+        "oppose": {"predicate"},
     }
     for index, raw in enumerate(plan):
         operator = _canonical(raw, schema)
@@ -293,20 +300,49 @@ def check_strict(plan: Sequence[Operator], schema: Schema) -> list[str]:
             if not operator.type:
                 problems.append(f"{where}: needs a declared class")
             possible = {one.name for one in schema.types if schema.is_a(one.name, operator.type)}
-        elif operator.op == "traverse":
+        elif operator.op in ("traverse", "join", "oppose"):
             predicate = schema.find_predicate(operator.predicate)
             if predicate is None:
+                possible = set()
+                continue
+            missing = [name for name in (predicate.domain, predicate.range)
+                       if name != TOP and schema.find_type(name) is None]
+            if missing:
+                problems.append(f"{where}: relation endpoints are not declared: {missing!r}")
                 possible = set()
                 continue
             domain, range_ = (predicate.domain, predicate.range) if operator.forward else (
                 predicate.range, predicate.domain
             )
+            if operator.op == "oppose":
+                wrong = sorted(name for name in possible if domain != TOP and range_ != TOP
+                               and not schema.is_a(name, domain) and not schema.is_a(name, range_))
+                if wrong:
+                    problems.append(f"{where}: relation endpoints do not admit {wrong!r}")
+                possible |= {one.name for one in schema.types if domain == TOP or range_ == TOP
+                             or schema.is_a(one.name, domain) or schema.is_a(one.name, range_)}
+                continue
             if domain != TOP:
                 wrong = sorted(name for name in possible if not schema.is_a(name, domain))
                 if wrong:
                     problems.append(f"{where}: relation endpoint does not admit {wrong!r}")
-            possible = {one.name for one in schema.types
-                        if range_ == TOP or schema.is_a(one.name, range_)}
+            matched = {one.name for one in schema.types
+                       if range_ == TOP or schema.is_a(one.name, range_)}
+            if operator.op == "join":
+                narrowed = {name for name in matched if not operator.type
+                            or schema.is_a(name, operator.type)}
+                if matched and not narrowed:
+                    problems.append(f"{where}: matched class is incompatible with the endpoint")
+                if operator.value and not operator.field:
+                    problems.append(f"{where}: a matched value needs a field")
+                wrong = sorted(name for name in narrowed if operator.field
+                    and operator.field not in {
+                        field.name for field in schema.declared_fields(name)})
+                if wrong:
+                    problems.append(f"{where}: matched field {operator.field!r} "
+                                    f"is not declared on {wrong!r}")
+            else:
+                possible = matched
         elif operator.op in ("filter", "compare"):
             if operator.type:
                 narrowed = {name for name in possible if schema.is_a(name, operator.type)}
@@ -328,8 +364,8 @@ def check_strict(plan: Sequence[Operator], schema: Schema) -> list[str]:
 class _Access:
     """What an operator needs to ask the ontology and the store: the QL TBox and the store."""
 
-    def __init__(self, store, t: TBox, sql: bool) -> None:  # noqa: ANN001
-        self.store, self.t, self.sql = store, t, sql
+    def __init__(self, store, t: TBox, sql: bool, *, strict: bool, limit: int) -> None:  # noqa: ANN001
+        self.store, self.t, self.sql, self.strict, self.limit = store, t, sql, strict, limit
 
 
 def _apply(
@@ -346,6 +382,10 @@ def _apply(
     if not carried:
         return Executed(operator=operator, count=0 if operator.op == "aggregate" else None,
                         reason="nothing reached this step")
+    if access.strict and operator.op == "join":
+        return _join(operator, carried, held, adjacency, schema, access)
+    if access.strict and operator.op == "oppose":
+        return _opposition(operator, carried, adjacency, access.t, access.limit)
     if operator.op in ("traverse", "join", "oppose"):
         return _traverse(operator, carried, adjacency, access.t)
     if operator.op == "filter":
@@ -407,6 +447,64 @@ def _traverse(
         rewriting=tuple(f"{name}(?y, ?x)" if back else f"{name}(?x, ?y)" for name, back in ways),
         reason=reason,
     )
+
+
+def _join(
+    operator: Operator, carried: tuple[str, ...], held: dict[str, Node],
+    adjacency: Adjacency, schema: Schema, access: _Access,
+) -> Executed:
+    """A relation semijoin: preserve anchors with matches and retain every matched pair.
+
+    Groups map each surviving anchor to its matched objects. Aggregates count anchors,
+    once each; pair multiplicity is visible in groups and never duplicates an anchor.
+    """
+    predicate = schema.find_predicate(operator.predicate)
+    target_type = predicate.range if operator.forward else predicate.domain
+    target_type = operator.type or ("" if target_type == TOP else target_type)
+    resolved = _resolve(Operator(op="resolve", type=target_type), held, schema, access)
+    wanted = normalise(operator.value)
+    eligible = {node_id for node_id in resolved.nodes if not operator.field
+                or _matches(held[node_id], operator.field, wanted)}
+    ways = directed(access.t, operator.predicate)
+    groups: dict[str, tuple[str, ...]] = {}
+    crossed: set[str] = set()
+    for anchor in carried:
+        matches: set[str] = set()
+        for edge in adjacency.edges(anchor):
+            if ((edge.predicate, edge.forward != operator.forward) in ways
+                    and edge.other in eligible):
+                matches.add(edge.other)
+                crossed.add(edge.link_id)
+        if matches:
+            groups[anchor] = tuple(sorted(matches))
+    return Executed(operator=operator, nodes=tuple(groups), groups=groups,
+        witnesses=tuple(sorted(crossed)), rewriting=(*resolved.rewriting, *(
+            f"{name}(?y, ?x)" if back else f"{name}(?x, ?y)" for name, back in ways)),
+        reason="" if groups else "no anchor has a matching object across the declared relation")
+
+
+def _opposition(
+    operator: Operator, carried: tuple[str, ...], adjacency: Adjacency, t: TBox, limit: int,
+) -> Executed:
+    """Both sides of the complete opposition component; this walk asserts no symmetry."""
+    predicates = {name for name, _ in directed(t, operator.predicate)}
+    reached = set(carried)
+    pending = deque(carried)
+    crossed: set[str] = set()
+    while pending:
+        for edge in adjacency.edges(pending.popleft()):
+            if edge.predicate not in predicates:
+                continue
+            crossed.add(edge.link_id)
+            if edge.other not in reached:
+                reached.add(edge.other)
+                if len(reached) > limit:
+                    raise PlanRefused("budget", "opposition closure exceeds the node budget")
+                pending.append(edge.other)
+    return Executed(operator=operator, nodes=tuple(sorted(reached)),
+        witnesses=tuple(sorted(crossed)),
+        rewriting=tuple(f"walk both endpoints of {name}" for name in sorted(predicates)),
+        reason="" if crossed else "no declared opposition links are reachable from the anchors")
 
 
 def _filter(
