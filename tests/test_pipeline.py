@@ -299,13 +299,13 @@ def test_a_configuration_may_name_a_step_from_a_package_of_its_own(
 ) -> None:
     (tmp_path / "outside_steps.py").write_text(
         "from atlas.steps import register\n\n\n"
-        '@register("count_inputs", produces=("counted",))\n'
-        "def count_inputs(state):\n"
+        '@register("count_outside", produces=("counted",))\n'
+        "def count_outside(state):\n"
         '    return {"counted": len(state["inputs"])}\n',
         encoding="utf-8",
     )
     monkeypatch.syspath_prepend(str(tmp_path))
-    config = _config(tmp_path, imports=["outside_steps"], steps=["count_inputs"])
+    config = _config(tmp_path, imports=["outside_steps"], steps=["count_outside"])
 
     state = Pipeline.from_config(config).run(["a.pdf", "b.pdf"])
 

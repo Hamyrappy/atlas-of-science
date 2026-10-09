@@ -1,0 +1,33 @@
+# SciERC for the OWL 2 RL engine: what the annotation scheme implies, run as rules.
+#
+# The scheme gives each mention exactly one label, so the six classes are mutually
+# disjoint. That is the axiom that turns relation typing into a check: `used_for` goes
+# from a Method to a Task, so a `used_for` whose subject was extracted as a Metric makes
+# the engine infer that the mention is also a Method -- and the disjointness makes that a
+# clash with both premises named. A critic that found it by pattern-matching would be
+# re-implementing this one axiom.
+#
+# `compare` and `conjunction` are symmetric in the scheme's own definition; `hyponym_of`
+# and `part_of_mention` compose, so they are transitive. Nothing here types a mention the
+# extractor did not see: RL has no existential on the right.
+
+@prefix scierc: <https://w3id.org/atlas-of-science/scierc#> .
+@prefix atlas: <https://w3id.org/atlas-of-science/substrate#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+
+<https://w3id.org/atlas-of-science/scierc_rl>
+    a owl:Ontology ;
+    rdfs:label "SciERC, for rules over data" ;
+    owl:versionIRI <https://w3id.org/atlas-of-science/scierc_rl/0.2> ;
+    owl:imports <https://w3id.org/atlas-of-science/scierc> ;
+    atlas:profile "RL", "DL" .
+
+[] a owl:AllDisjointClasses ;
+   owl:members ( scierc:Task scierc:Method scierc:Metric scierc:Material
+                 scierc:OtherScientificTerm scierc:Generic ) .
+
+scierc:compare a owl:SymmetricProperty .
+scierc:conjunction a owl:SymmetricProperty .
+scierc:hyponymOf a owl:TransitiveProperty .
+scierc:partOfMention a owl:TransitiveProperty .

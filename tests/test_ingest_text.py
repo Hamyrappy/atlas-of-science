@@ -35,7 +35,7 @@ TEXT = (
 @pytest.fixture
 def document(tmp_path: Path) -> Path:
     path = tmp_path / "report.md"
-    path.write_text(TEXT, encoding="utf-8")
+    path.write_text(TEXT, encoding="utf-8", newline="\n")
     return path
 
 
@@ -103,7 +103,7 @@ def test_the_id_names_the_bytes_and_the_title_the_first_line(
     tmp_path: Path, document: Path
 ) -> None:
     copy = tmp_path / "elsewhere.md"
-    copy.write_text(TEXT, encoding="utf-8")
+    copy.write_text(TEXT, encoding="utf-8", newline="\n")
 
     source, same = read_text(document), read_text(copy)
 

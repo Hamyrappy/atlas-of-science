@@ -1,0 +1,23 @@
+# The map layer for the OWL 2 RL engine: a thing discussed under a narrow topic is
+# discussed under every broader one.
+#
+# `narrower` is transitive, and `in_topic` followed by `narrower` read backwards is
+# `in_topic` again. That is what lets dual-level retrieval start from a broad topic and
+# find a node filed only under one of its sub-topics. It is a statement about the map, and
+# it stays one: nothing here makes a topic a class, or membership of one a type.
+
+@prefix map:   <https://w3id.org/atlas-of-science/map#> .
+@prefix atlas: <https://w3id.org/atlas-of-science/substrate#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+
+<https://w3id.org/atlas-of-science/science_map_rl>
+    a owl:Ontology ;
+    rdfs:label "Atlas of Science: the science map, for rules over data" ;
+    owl:versionIRI <https://w3id.org/atlas-of-science/science_map_rl/0.2> ;
+    owl:imports <https://w3id.org/atlas-of-science/science_map>,
+                <https://w3id.org/atlas-of-science/science_core_rl> ;
+    atlas:profile "RL", "DL" .
+
+map:narrower a owl:TransitiveProperty .
+map:inTopic owl:propertyChainAxiom ( map:inTopic [ owl:inverseOf map:narrower ] ) .

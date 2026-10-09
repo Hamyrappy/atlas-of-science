@@ -94,15 +94,29 @@ def register(
     requires: Iterable[str] = (),
     produces: Iterable[str] = (),
     options: type[Frozen] = Nothing,
+    replace: bool = False,
 ) -> Callable[[Function], Function]:
     """Register a function under a name, declaring the state keys it uses and what it takes.
 
     A step that does not name an options model takes none, and any option a configuration
     writes under its name is refused: there is no path left that swallows one.
+
+    A name is taken once. Registering something else under it raises a ValueError naming
+    both functions, because the alternative is a configuration that runs whichever module
+    happened to be imported last; registering the very same step again is not an error.
+    `replace=True` is how a caller says the replacement is meant.
     """
 
     def bind(function: Function) -> Function:
-        _STEPS[name] = Step(name, function, tuple(requires), tuple(produces), options)
+        step = Step(name, function, tuple(requires), tuple(produces), options)
+        taken = _STEPS.get(name)
+        if taken is not None and taken != step and not replace:
+            raise ValueError(
+                f"step {name!r} is already registered by {_origin(taken.function)}, and "
+                f"{_origin(function)} may not replace it: register it under another name, "
+                f"or pass replace=True."
+            )
+        _STEPS[name] = step
         return function
 
     return bind
@@ -119,13 +133,27 @@ def get(name: str) -> Step:
     return _STEPS[name]
 
 
+def _origin(function: Function) -> str:
+    """Where a function was written, for a message about two of them wanting one name."""
+    module = getattr(function, "__module__", None)
+    name = getattr(function, "__qualname__", None) or repr(function)
+    return f"{module}.{name}" if module else name
+
+
 def _takes(options: type[Frozen]) -> str:
-    """The options a step knows, written as the fields declaring them are: name, type, default."""
+    """The options a step knows, written as the fields declaring them are: name, type, default.
+
+    The default is asked for rather than read off the field, because a field declared
+    with a factory holds a sentinel and not a value: printing it put `PydanticUndefined`
+    in front of somebody editing a configuration, which is the one audience this message
+    exists for.
+    """
     if not options.model_fields:
         return "no options"
     return ", ".join(
         f"{name}: {_named(field.annotation)}"
-        + ("" if field.is_required() else f" = {field.default!r}")
+        + ("" if field.is_required()
+           else f" = {field.get_default(call_default_factory=True)!r}")
         for name, field in options.model_fields.items()
     )
 
@@ -152,14 +180,45 @@ def _named(annotation: Any) -> str:
 
 
 from atlas.steps import (  # noqa: E402, F401
+    align,
     answer,
+    check_answer,
+    classify,
+    communities,
+    compare,
+    critique,
+    define_llm,
+    diffuse,
+    entail,
     extract_llm,
+    federate,
+    formal_check,
+    graph_answer,
+    graph_expand,
+    graph_sql,
     index_nodes,
+    induce,
     ingest_pdf,
+    ingest_table,
     ingest_text,
+    lineage,
+    map_rows,
     markdown,
+    paths,
+    plan,
+    query,
+    reconcile,
     record,
+    relate,
+    relate_llm,
     relocate,
+    repair,
     retrieve,
+    route,
+    salience,
+    shacl_validate,
+    subgraph,
+    topics,
+    units,
     validate,
 )

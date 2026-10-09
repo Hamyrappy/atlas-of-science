@@ -15,6 +15,7 @@ from __future__ import annotations
 from atlas.model.assertion import Agent, AgentKind, Assertion, current
 from atlas.model.base import SCHEMA_VERSION, Frozen
 from atlas.model.graph import Evidenced, Link, Node
+from atlas.model.owl import Axiom
 from atlas.model.run import Run
 from atlas.model.schema import FieldDef, PredicateDef, Schema, TypeDef
 from atlas.model.source import Segment, Source, Span
@@ -24,6 +25,7 @@ __all__ = [
     "Agent",
     "AgentKind",
     "Assertion",
+    "Axiom",
     "Evidenced",
     "FieldDef",
     "Frozen",

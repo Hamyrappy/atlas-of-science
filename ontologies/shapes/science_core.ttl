@@ -1,0 +1,71 @@
+# What a record written under the science core must carry, in closed world.
+#
+# The ontology says what follows from a record; it cannot say what a record must hold,
+# because under OWL's open world a missing value is only an unmentioned one. These shapes
+# say it. Each is a rule the ontology would state if it could, and each is here because a
+# question an architecture answers goes wrong without it.
+#
+# Severity is chosen per rule. A violation refuses the object -- it is not written; a
+# warning is recorded beside it and the object is kept. The rule of thumb: refuse what
+# makes the record false, warn about what makes it incomplete.
+
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix core:  <https://w3id.org/atlas-of-science/core#> .
+@prefix field: <https://w3id.org/atlas-of-science/fields#> .
+@prefix atlas: <https://w3id.org/atlas-of-science/substrate#> .
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix evi:   <https://w3id.org/EVI#> .
+@prefix sepio: <https://w3id.org/sepio-framework/sepio-linkml/> .
+
+# A computation that depends on itself, through any number of others. OWL 2 DL cannot say
+# this of a transitive relation -- its global restrictions forbid an irreflexive one -- so
+# it is checked here, over the relation an extractor actually asserts.
+core:AcyclicDependency a sh:NodeShape ;
+    sh:targetClass evi:Computation ;
+    sh:severity sh:Violation ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "the computation depends on its own output through a chain of others" ;
+        sh:prefixes core:Prefixes ;
+        sh:select """
+            SELECT $this WHERE { $this core:directlyDependsOn+ $this . }
+        """ ;
+    ] .
+
+# A position with no proposition is not a position; one on two propositions is two
+# positions written as one, and the direction and strength belong to neither.
+core:StatementStatesOne a sh:NodeShape ;
+    sh:targetClass sepio:Statement ;
+    sh:property [
+        sh:path core:states ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "a statement takes a position on one proposition, and this one names several" ;
+    ] .
+
+# A claim nobody can read is not a claim.
+core:PropositionHasExpression a sh:NodeShape ;
+    sh:targetClass sepio:Proposition ;
+    sh:property [
+        sh:path field:expression ;
+        sh:minCount 1 ;
+        sh:severity sh:Violation ;
+        sh:message "a proposition records what it claims" ;
+    ] .
+
+# An argument that rests on nothing is an assertion with a direction. It is kept -- the
+# source did argue it -- and flagged, because an answer that cites it as evidence cites a
+# line with no ground under it.
+core:LineRestsOnSomething a sh:NodeShape ;
+    sh:targetClass sepio:EvidenceLine ;
+    sh:property [
+        sh:path core:restsOn ;
+        sh:minCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "this line of argument rests on no result the record holds" ;
+    ] .
+
+core:Prefixes a owl:Ontology ;
+    sh:declare [ sh:prefix "core" ; sh:namespace "https://w3id.org/atlas-of-science/core#"^^xsd:anyURI ] .

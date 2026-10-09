@@ -1,0 +1,396 @@
+# The scientific contract every architecture under `architectures/` is built on: a claim,
+# who takes what position on it, what argument that position rests on, what kind of
+# ground the argument is, and which computation produced the number.
+#
+# It carries no subject matter. There is no method, no reagent, no model architecture
+# here -- those belong to an ontology of the field being read, loaded beside this one.
+#
+# THIS IS THE BASE MODULE. It states what every profile can say: the class hierarchy,
+# the signatures of the relations, which relations specialise which, and which classes
+# nothing can be both of. That is exactly the part of the ontology that is inside OWL 2
+# EL, QL and RL at once, which is why every architecture can load it. What only some
+# engines can use lives in a module per profile, each importing this one:
+#
+#   science_core_rl.ttl   characteristics, property chains, disjoint relations, and the
+#                         sufficient conditions of the defined classes -- run as rules
+#                         over data by the OWL 2 RL engine
+#   science_core_el.ttl   full definitions with existentials, and chains -- classified
+#                         completely by the OWL 2 EL engine
+#   science_core_ql.ttl   existentials on the right and inverse relations -- used by the
+#                         OWL 2 QL engine to rewrite a query into one a store can answer
+#   science_core_dl.ttl   all of it, for the tableau that checks the ontology before a run
+#
+# That split is the OWL 2 profiles doing their job: each profile is a guarantee an engine
+# makes, and an ontology that mixed them would be one no engine could fully honour.
+#
+# Identities. Class IRIs are the real ones: ECO, BFO, IAO, OBI, SIO and EVI publish them
+# and they are written out here unchanged, because a label is not an identity and renaming
+# an imported term is how a corpus stops being comparable with anybody else's. Relation
+# IRIs are local (`core:`) with the external property named by `skos:closeMatch`. That is
+# deliberate and it is the honest state: the class IRIs were checked against the published
+# ontologies, the SEPIO slot URIs were not pinned, and minting a plausible-looking IRI for
+# a slot nobody verified would be worse than saying so.
+#
+# Disjointness is declared where the bridge is easy to get wrong: a document describing a
+# procedure is not the procedure being carried out, and neither is a sample. Those axioms
+# are what the formal gate and the RL engine's `cax-dw` rule have to work with, and what
+# stops an ontology from quietly deciding that a file is an experiment.
+
+@prefix core:  <https://w3id.org/atlas-of-science/core#> .
+@prefix field: <https://w3id.org/atlas-of-science/fields#> .
+@prefix atlas: <https://w3id.org/atlas-of-science/substrate#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix obo:   <http://purl.obolibrary.org/obo/> .
+@prefix sio:   <http://semanticscience.org/resource/> .
+@prefix evi:   <https://w3id.org/EVI#> .
+@prefix sepio: <https://w3id.org/sepio-framework/sepio-linkml/> .
+@prefix prov:  <http://www.w3.org/ns/prov#> .
+
+<https://w3id.org/atlas-of-science/science_core>
+    a owl:Ontology ;
+    rdfs:label "Atlas of Science: the scientific argument" ;
+    owl:versionIRI <https://w3id.org/atlas-of-science/science_core/0.2> ;
+    owl:imports <https://w3id.org/atlas-of-science/fields> ;
+    atlas:profile "EL", "QL", "RL", "DL" .
+
+# ---- what there is ------------------------------------------------------------------------
+
+obo:BFO_0000001 a owl:Class ;
+    atlas:name "Entity" ;
+    skos:definition "Anything the corpus talks about, before it is said what kind of thing it is." ;
+    atlas:fields ( field:name field:definition ) ;
+    atlas:labelField field:name .
+
+obo:BFO_0000040 a owl:Class ;
+    atlas:name "MaterialEntity" ;
+    rdfs:subClassOf obo:BFO_0000001 ;
+    skos:definition "A physical thing that took part in the work: a sample, an instrument, a substance." ;
+    atlas:fields ( field:name field:definition ) ;
+    atlas:labelField field:name .
+
+obo:BFO_0000015 a owl:Class ;
+    atlas:name "Process" ;
+    rdfs:subClassOf obo:BFO_0000001 ;
+    skos:definition "Something that happened over time, as opposed to the description of it." ;
+    atlas:fields ( field:name field:definition ) ;
+    atlas:labelField field:name .
+
+obo:IAO_0000030 a owl:Class ;
+    atlas:name "InformationEntity" ;
+    rdfs:subClassOf obo:BFO_0000001 ;
+    skos:definition "Content that is about something else: a description, a plan, a record, a claim." ;
+    atlas:fields ( field:name field:definition ) ;
+    atlas:labelField field:name .
+
+obo:BFO_0000019 a owl:Class ;
+    atlas:name "Quality" ;
+    rdfs:subClassOf obo:BFO_0000001 ;
+    skos:definition "A property of something, distinct from the number written down for it." ;
+    atlas:fields ( field:name field:definition ) ;
+    atlas:labelField field:name .
+
+[] a owl:AllDisjointClasses ;
+    owl:members ( obo:BFO_0000040 obo:BFO_0000015 obo:IAO_0000030 ) .
+
+# ---- the record of the work ---------------------------------------------------------------
+
+obo:IAO_0000310 a owl:Class ;
+    atlas:name "Document" ;
+    rdfs:subClassOf obo:IAO_0000030 ;
+    skos:definition "A paper, a report, a protocol as written; the thing that was read." ;
+    atlas:fields ( field:title field:identifier field:definition ) ;
+    atlas:labelField field:title .
+
+obo:OBI_0000066 a owl:Class ;
+    atlas:name "Study" ;
+    rdfs:subClassOf obo:BFO_0000015 ;
+    skos:definition "One investigation as it was actually carried out." ;
+    atlas:fields ( field:name field:design field:definition ) ;
+    atlas:labelField field:name .
+
+core:Context a owl:Class ;
+    atlas:name "Context" ;
+    rdfs:subClassOf obo:IAO_0000030 ;
+    skos:definition "The conditions a result was obtained under, as a thing that can be compared." ;
+    atlas:fields ( field:description field:conditions field:definition ) ;
+    atlas:labelField field:description .
+
+sepio:StudyResult a owl:Class ;
+    atlas:name "StudyResult" ;
+    rdfs:subClassOf obo:IAO_0000030 ;
+    skos:definition "One measured outcome, with its value, its unit and the conditions it holds under." ;
+    atlas:fields ( field:statement field:value field:unit field:conditions field:definition ) ;
+    atlas:labelField field:statement .
+
+# ---- what is claimed about it -------------------------------------------------------------
+
+sepio:Proposition a owl:Class ;
+    atlas:name "Proposition" ;
+    rdfs:subClassOf obo:IAO_0000030 ;
+    skos:definition "What is being claimed, independently of who claims it or how strongly." ;
+    atlas:fields ( field:expression field:subject_term field:predicate_term field:object_term
+                   field:qualifier field:definition ) ;
+    atlas:labelField field:expression .
+
+sepio:Statement a owl:Class ;
+    atlas:name "Statement" ;
+    rdfs:subClassOf obo:IAO_0000030 ;
+    skos:definition "One party's position on a proposition, with a direction and a strength." ;
+    atlas:fields ( field:text field:direction field:strength field:definition ) ;
+    atlas:labelField field:text .
+
+sepio:EvidenceLine a owl:Class ;
+    atlas:name "EvidenceLine" ;
+    rdfs:subClassOf obo:IAO_0000030 ;
+    skos:definition "One argument for or against a proposition, made of the results it rests on." ;
+    atlas:fields ( field:summary field:direction field:strength field:definition ) ;
+    atlas:labelField field:summary .
+
+obo:ECO_0000000 a owl:Class ;
+    atlas:name "EvidenceType" ;
+    rdfs:subClassOf obo:IAO_0000030 ;
+    skos:definition "What kind of ground an argument is, as a term of a controlled vocabulary." ;
+    atlas:fields ( field:code field:label field:definition ) ;
+    atlas:labelField field:label .
+
+obo:ECO_0000217 a owl:Class ;
+    atlas:name "AssertionMethod" ;
+    rdfs:subClassOf obo:IAO_0000030 ;
+    skos:definition "How the record was made, kept apart from what the science rests on." ;
+    atlas:fields ( field:code field:label field:definition ) ;
+    atlas:labelField field:label .
+
+sepio:Contribution a owl:Class ;
+    atlas:name "Contribution" ;
+    rdfs:subClassOf obo:IAO_0000030 ;
+    skos:definition "Who did what to this record: extracted it, assessed it, corrected it." ;
+    atlas:fields ( field:contributor field:activity_type field:definition ) ;
+    atlas:labelField field:contributor .
+
+# ---- what it can be recomputed from -------------------------------------------------------
+
+evi:Dataset a owl:Class ;
+    atlas:name "Dataset" ;
+    rdfs:subClassOf obo:IAO_0000030 ;
+    skos:definition "A body of data a result was computed from, at a stated version." ;
+    atlas:fields ( field:name field:version field:definition ) ;
+    atlas:labelField field:name .
+
+evi:Software a owl:Class ;
+    atlas:name "Software" ;
+    rdfs:subClassOf obo:IAO_0000030 ;
+    skos:definition "Code a result was computed with, at a stated version." ;
+    atlas:fields ( field:name field:version field:definition ) ;
+    atlas:labelField field:name .
+
+evi:Computation a owl:Class ;
+    atlas:name "Computation" ;
+    rdfs:subClassOf obo:BFO_0000015 ;
+    skos:definition "One run that produced a result from data and code." ;
+    atlas:fields ( field:name field:version field:definition ) ;
+    atlas:labelField field:name .
+
+# ---- what an engine works out, and nobody is asked for ------------------------------------
+#
+# Each of these is a class whose members the axioms decide. The base module says only
+# where they sit; the profile modules say what makes something one. An extractor is never
+# offered them (`atlas:inferred`), because asking a model to label a line of argument as
+# "supporting" is asking it to guess what one `supports` link already settles.
+
+core:SupportingLine a owl:Class ;
+    atlas:name "SupportingLine" ;
+    rdfs:subClassOf sepio:EvidenceLine ;
+    atlas:inferred true ;
+    skos:definition "A line of argument that supports some proposition." .
+
+core:DisputingLine a owl:Class ;
+    atlas:name "DisputingLine" ;
+    rdfs:subClassOf sepio:EvidenceLine ;
+    atlas:inferred true ;
+    skos:definition "A line of argument that disputes some proposition." .
+
+core:SupportedProposition a owl:Class ;
+    atlas:name "SupportedProposition" ;
+    rdfs:subClassOf sepio:Proposition ;
+    atlas:inferred true ;
+    skos:definition "A proposition some line of argument supports." .
+
+core:ContestedProposition a owl:Class ;
+    atlas:name "ContestedProposition" ;
+    rdfs:subClassOf sepio:Proposition ;
+    atlas:inferred true ;
+    skos:definition "A proposition some line of argument disputes. Whether it is also supported is a separate fact, and an answer about it must carry both." .
+
+core:ConditionedResult a owl:Class ;
+    atlas:name "ConditionedResult" ;
+    rdfs:subClassOf sepio:StudyResult ;
+    atlas:inferred true ;
+    skos:definition "A result the record ties to the conditions it was obtained under, which is what makes it comparable with another." .
+
+core:RecomputableResult a owl:Class ;
+    atlas:name "RecomputableResult" ;
+    rdfs:subClassOf sepio:StudyResult ;
+    atlas:inferred true ;
+    skos:definition "A result derived from a computation that names both the data it read and the code it ran." .
+
+# ---- the argument -------------------------------------------------------------------------
+
+core:states a owl:ObjectProperty ;
+    atlas:name "states" ;
+    rdfs:domain sepio:Statement ;
+    rdfs:range sepio:Proposition ;
+    skos:closeMatch sepio:proposition ;
+    skos:definition "The statement takes a position on this proposition." .
+
+core:hasEvidenceLine a owl:ObjectProperty ;
+    atlas:name "has_evidence_line" ;
+    rdfs:domain sepio:Statement ;
+    rdfs:range sepio:EvidenceLine ;
+    skos:closeMatch sepio:has_evidence_lines ;
+    skos:definition "The position is argued along this line." .
+
+core:bearsOn a owl:ObjectProperty ;
+    atlas:name "bears_on" ;
+    rdfs:domain sepio:EvidenceLine ;
+    rdfs:range sepio:Proposition ;
+    skos:definition "The line of argument concerns the proposition, in whichever direction. A query for what bears on a claim finds the support and the dispute together, which is the only honest way to ask." .
+
+core:supports a owl:ObjectProperty ;
+    atlas:name "supports" ;
+    rdfs:subPropertyOf core:bearsOn ;
+    rdfs:domain sepio:EvidenceLine ;
+    rdfs:range sepio:Proposition ;
+    skos:closeMatch evi:directlySupports, sio:SIO_000773 ;
+    skos:definition "The line of argument is for the proposition." .
+
+core:disputes a owl:ObjectProperty ;
+    atlas:name "disputes" ;
+    rdfs:subPropertyOf core:bearsOn ;
+    rdfs:domain sepio:EvidenceLine ;
+    rdfs:range sepio:Proposition ;
+    skos:closeMatch evi:challenges ;
+    skos:definition "The line of argument is against the proposition." .
+
+core:restsOn a owl:ObjectProperty ;
+    atlas:name "rests_on" ;
+    rdfs:domain sepio:EvidenceLine ;
+    rdfs:range sepio:StudyResult ;
+    skos:definition "The argument is made of this result." .
+
+core:evidenceType a owl:ObjectProperty ;
+    atlas:name "evidence_type" ;
+    rdfs:domain sepio:EvidenceLine ;
+    rdfs:range obo:ECO_0000000 ;
+    skos:definition "What kind of ground this argument is." .
+
+core:assertedBy a owl:ObjectProperty ;
+    atlas:name "asserted_by" ;
+    rdfs:domain sepio:Statement ;
+    rdfs:range sepio:Contribution ;
+    skos:closeMatch prov:wasAttributedTo ;
+    skos:definition "Who put this position on the record." .
+
+core:assertionMethod a owl:ObjectProperty ;
+    atlas:name "assertion_method" ;
+    rdfs:domain sepio:Contribution ;
+    rdfs:range obo:ECO_0000217 ;
+    skos:definition "How the record was made, which is not what the science rests on." .
+
+# ---- the work -----------------------------------------------------------------------------
+
+core:producedBy a owl:ObjectProperty ;
+    atlas:name "produced_by" ;
+    rdfs:domain sepio:StudyResult ;
+    rdfs:range obo:OBI_0000066 ;
+    skos:closeMatch prov:wasGeneratedBy ;
+    skos:definition "The result came out of this investigation." .
+
+core:observedUnder a owl:ObjectProperty ;
+    atlas:name "observed_under" ;
+    rdfs:domain sepio:StudyResult ;
+    rdfs:range core:Context ;
+    skos:definition "The result holds under these conditions and is not known to hold elsewhere." .
+
+core:involves a owl:ObjectProperty ;
+    atlas:name "involves" ;
+    rdfs:domain obo:OBI_0000066 ;
+    rdfs:range obo:BFO_0000001 ;
+    skos:closeMatch obo:OBI_0000293 ;
+    skos:definition "The investigation was carried out on, or with, this thing." .
+
+core:reportedIn a owl:ObjectProperty ;
+    atlas:name "reported_in" ;
+    rdfs:domain obo:OBI_0000066 ;
+    rdfs:range obo:IAO_0000310 ;
+    skos:definition "The investigation is written up here." .
+
+core:about a owl:ObjectProperty ;
+    atlas:name "about" ;
+    rdfs:domain sepio:Proposition ;
+    rdfs:range obo:BFO_0000001 ;
+    skos:closeMatch sio:SIO_000332 ;
+    skos:definition "What the claim is about." .
+
+core:partOf a owl:ObjectProperty ;
+    atlas:name "part_of" ;
+    rdfs:domain obo:BFO_0000001 ;
+    rdfs:range obo:BFO_0000001 ;
+    skos:closeMatch sio:SIO_000068 ;
+    skos:definition "The thing is a part of the other thing, in the same sense throughout." .
+
+core:hasPart a owl:ObjectProperty ;
+    atlas:name "has_part" ;
+    rdfs:domain obo:BFO_0000001 ;
+    rdfs:range obo:BFO_0000001 ;
+    skos:closeMatch sio:SIO_000028 ;
+    skos:definition "The converse of part_of. That it is the converse is an axiom of the profile modules, since OWL 2 EL has no inverse relations." .
+
+core:comparableWith a owl:ObjectProperty ;
+    atlas:name "comparable_with" ;
+    rdfs:domain core:Context ;
+    rdfs:range core:Context ;
+    skos:definition "The two sets of conditions were checked and found comparable." .
+
+# ---- what it can be recomputed from -------------------------------------------------------
+
+core:derivedFrom a owl:ObjectProperty ;
+    atlas:name "derived_from" ;
+    rdfs:domain sepio:StudyResult ;
+    rdfs:range evi:Computation ;
+    skos:closeMatch evi:derivedFrom ;
+    skos:definition "The result is the output of this computation." .
+
+core:usedDataset a owl:ObjectProperty ;
+    atlas:name "used_dataset" ;
+    rdfs:domain evi:Computation ;
+    rdfs:range evi:Dataset ;
+    skos:closeMatch evi:usedDataset ;
+    skos:definition "The computation read this data." .
+
+core:usedSoftware a owl:ObjectProperty ;
+    atlas:name "used_software" ;
+    rdfs:domain evi:Computation ;
+    rdfs:range evi:Software ;
+    skos:closeMatch evi:usedSoftware ;
+    skos:definition "The computation ran this code." .
+
+core:directlyDependsOn a owl:ObjectProperty ;
+    atlas:name "directly_depends_on" ;
+    rdfs:subPropertyOf core:dependsOn ;
+    rdfs:domain evi:Computation ;
+    rdfs:range evi:Computation ;
+    skos:definition "The computation consumed the output of the other one, with nothing between them. What an extractor asserts." .
+
+core:dependsOn a owl:ObjectProperty ;
+    atlas:name "depends_on" ;
+    rdfs:domain evi:Computation ;
+    rdfs:range evi:Computation ;
+    skos:definition "The computation consumed the output of the other one, directly or through others. Transitive in the profile modules that can say so." .
+
+core:computedFromData a owl:ObjectProperty ;
+    atlas:name "computed_from_data" ;
+    rdfs:domain sepio:StudyResult ;
+    rdfs:range evi:Dataset ;
+    skos:definition "The result rests, through its computation and anything that computation consumed, on this data. Inferred by a property chain; nobody needs to assert it." .

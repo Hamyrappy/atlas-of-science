@@ -1,0 +1,67 @@
+# The science core for the OWL 2 EL engine: full definitions, classified completely.
+#
+# EL is the profile in which every subsumption the axioms imply is found, in polynomial
+# time. That is what an ontology is checked with when the question is about the ontology
+# itself -- which classes a new definition falls under, which two definitions coincide,
+# which class nothing can be -- and it is what `Schema.is_a` answers from whenever this
+# module is loaded.
+#
+# So the defined classes get their definitions here as equivalences, necessary and
+# sufficient: a SupportingLine *is* an evidence line that supports some proposition. With
+# those, a class another ontology defines as "a result obtained under conditions and
+# derived from a computation" is classified under both ConditionedResult and whatever that
+# computation makes it, without anybody writing either parent down.
+#
+# Nothing here has an inverse, a symmetric relation or a disjoint relation: EL has none of
+# them. Those are what the RL and QL modules are for. Existential claims that hold of every
+# member of a class -- every result came out of some investigation -- are EL, and they are
+# here, because classification needs them and they invent nothing: the EL engine runs
+# over the ontology, never over data.
+
+@prefix core:  <https://w3id.org/atlas-of-science/core#> .
+@prefix atlas: <https://w3id.org/atlas-of-science/substrate#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix obo:   <http://purl.obolibrary.org/obo/> .
+@prefix evi:   <https://w3id.org/EVI#> .
+@prefix sepio: <https://w3id.org/sepio-framework/sepio-linkml/> .
+
+<https://w3id.org/atlas-of-science/science_core_el>
+    a owl:Ontology ;
+    rdfs:label "Atlas of Science: the scientific argument, for classification" ;
+    owl:versionIRI <https://w3id.org/atlas-of-science/science_core_el/0.2> ;
+    owl:imports <https://w3id.org/atlas-of-science/science_core> ;
+    atlas:profile "EL", "DL" .
+
+core:partOf a owl:TransitiveProperty .
+core:dependsOn a owl:TransitiveProperty .
+core:computedFromData owl:propertyChainAxiom ( core:derivedFrom core:usedDataset ) ,
+                                             ( core:derivedFrom core:dependsOn core:usedDataset ) .
+
+# ---- what every member of a class has ----------------------------------------------------
+
+sepio:StudyResult rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty core:producedBy ; owl:someValuesFrom obo:OBI_0000066 ] .
+sepio:Statement rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty core:states ; owl:someValuesFrom sepio:Proposition ] .
+sepio:EvidenceLine rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty core:restsOn ; owl:someValuesFrom sepio:StudyResult ] .
+evi:Computation rdfs:subClassOf
+    [ a owl:Restriction ; owl:onProperty core:usedSoftware ; owl:someValuesFrom evi:Software ] .
+
+# ---- what makes something one of the defined classes, both ways --------------------------
+
+core:SupportingLine owl:equivalentClass [ owl:intersectionOf ( sepio:EvidenceLine
+    [ a owl:Restriction ; owl:onProperty core:supports ; owl:someValuesFrom sepio:Proposition ] ) ] .
+
+core:DisputingLine owl:equivalentClass [ owl:intersectionOf ( sepio:EvidenceLine
+    [ a owl:Restriction ; owl:onProperty core:disputes ; owl:someValuesFrom sepio:Proposition ] ) ] .
+
+core:ConditionedResult owl:equivalentClass [ owl:intersectionOf ( sepio:StudyResult
+    [ a owl:Restriction ; owl:onProperty core:observedUnder ; owl:someValuesFrom core:Context ] ) ] .
+
+core:RecomputableResult owl:equivalentClass [ owl:intersectionOf ( sepio:StudyResult
+    [ a owl:Restriction ; owl:onProperty core:derivedFrom ; owl:someValuesFrom
+        [ owl:intersectionOf ( evi:Computation
+            [ a owl:Restriction ; owl:onProperty core:usedDataset ; owl:someValuesFrom evi:Dataset ]
+            [ a owl:Restriction ; owl:onProperty core:usedSoftware ; owl:someValuesFrom evi:Software ] ) ] ] ) ] .

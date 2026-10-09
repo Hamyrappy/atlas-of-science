@@ -1,0 +1,58 @@
+# The words a record is written in: the datatype properties every other ontology's classes
+# list as their fields.
+#
+# They are declared once, here, and imported, because a field is a slot of a node and a
+# node's fields are keyed by name: a `name` declared twice would be two IRIs for one slot.
+# None of them has an `rdfs:domain`. In OWL a domain is an inference -- "anything with a
+# name is an Entity" -- which is not what a class listing a field means, and which would
+# type every node that carried a name. What a class records is `atlas:fields` on the
+# class; what a record must carry is a SHACL shape (`shapes/`).
+
+@prefix field: <https://w3id.org/atlas-of-science/fields#> .
+@prefix atlas: <https://w3id.org/atlas-of-science/substrate#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix schema: <https://schema.org/> .
+@prefix dct:   <http://purl.org/dc/terms/> .
+
+<https://w3id.org/atlas-of-science/fields>
+    a owl:Ontology ;
+    rdfs:label "Atlas of Science fields" ;
+    owl:versionIRI <https://w3id.org/atlas-of-science/fields/0.2> ;
+    atlas:profile "RDFS", "EL", "QL", "RL", "DL" .
+
+field:name a owl:DatatypeProperty ; rdfs:range xsd:string ; skos:closeMatch schema:name .
+field:title a owl:DatatypeProperty ; rdfs:range xsd:string ; skos:closeMatch dct:title .
+field:label a owl:DatatypeProperty ; rdfs:range xsd:string ; skos:closeMatch skos:prefLabel .
+field:definition a owl:DatatypeProperty ; rdfs:range xsd:string ; skos:closeMatch skos:definition .
+field:description a owl:DatatypeProperty ; rdfs:range xsd:string ; skos:closeMatch dct:description .
+field:summary a owl:DatatypeProperty ; rdfs:range xsd:string ; skos:closeMatch dct:abstract .
+field:identifier a owl:DatatypeProperty ; rdfs:range xsd:string ; skos:closeMatch dct:identifier .
+field:version a owl:DatatypeProperty ; rdfs:range xsd:string ; skos:closeMatch schema:version .
+field:code a owl:DatatypeProperty ; rdfs:range xsd:string ; skos:closeMatch skos:notation .
+field:text a owl:DatatypeProperty ; rdfs:range xsd:string .
+field:statement a owl:DatatypeProperty ; rdfs:range xsd:string .
+field:expression a owl:DatatypeProperty ; rdfs:range xsd:string .
+field:value a owl:DatatypeProperty ; rdfs:range xsd:string ;
+    skos:definition "A value as the source wrote it; a unit is its own field." .
+field:unit a owl:DatatypeProperty ; rdfs:range xsd:string .
+field:conditions a owl:DatatypeProperty ; rdfs:range xsd:string .
+field:design a owl:DatatypeProperty ; rdfs:range xsd:string .
+field:direction a owl:DatatypeProperty ; rdfs:range xsd:string .
+field:strength a owl:DatatypeProperty ; rdfs:range xsd:string .
+field:contributor a owl:DatatypeProperty ; rdfs:range xsd:string .
+field:activity_type a owl:DatatypeProperty ; rdfs:range xsd:string .
+field:subject_term a owl:DatatypeProperty ; rdfs:range xsd:string .
+field:predicate_term a owl:DatatypeProperty ; rdfs:range xsd:string .
+field:object_term a owl:DatatypeProperty ; rdfs:range xsd:string .
+field:qualifier a owl:DatatypeProperty ; rdfs:range xsd:string .
+field:scope a owl:DatatypeProperty ; rdfs:range xsd:string .
+field:order a owl:DatatypeProperty ; rdfs:range xsd:string .
+field:category a owl:DatatypeProperty ; rdfs:range xsd:string .
+field:kind a owl:DatatypeProperty ; rdfs:range xsd:string .
+field:quantifier a owl:DatatypeProperty ; rdfs:range xsd:string .
+field:polarity a owl:DatatypeProperty ; rdfs:range xsd:string .
+field:modality a owl:DatatypeProperty ; rdfs:range xsd:string .
+field:logic_profile a owl:DatatypeProperty ; rdfs:range xsd:string .

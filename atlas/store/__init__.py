@@ -150,4 +150,4 @@ def check_evidence(store: Store, assertion: Assertion) -> None:
         raise KeyError(f"assertion {assertion.id} stands on unknown source {source_id}")
 
 
-from atlas.store import jsonl, memory  # noqa: E402, F401
+from atlas.store import jsonl, memory, sqlite  # noqa: E402, F401

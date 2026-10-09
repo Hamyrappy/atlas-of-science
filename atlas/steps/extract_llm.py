@@ -2,7 +2,7 @@
 
 The types on offer are read out of whatever schema was loaded, so this module knows
 only that types have names, fields and a description, and nothing about what any of
-them mean; swapping the pack swaps the vocabulary without touching a line here. The
+them mean; swapping the ontology swaps the vocabulary without touching a line here. The
 model is asked for a verbatim quote and never for offsets, which `relocate` recovers.
 
 The noun a prompt uses for a segment is an option: a reader of PDFs calls them pages
@@ -127,10 +127,15 @@ def _statements(reply: dict, source_id: str, number: int) -> tuple[list[Statemen
 
 
 def _catalogue(schema: Schema) -> str:
-    """One line per type: its name, the fields it and its ancestors declare, its description."""
+    """One line per type: its name, the fields it and its ancestors declare, its description.
+
+    A defined class is left out. Its members are whatever the ontology's axioms make them,
+    and an engine works that out; offering it to a model would ask the model to guess.
+    """
     return "\n".join(
         f"- {type_def.name} "
         f"[{', '.join(field.name for field in schema.declared_fields(type_def.name))}]: "
         f"{type_def.description}"
         for type_def in schema.types
+        if not type_def.defined
     )

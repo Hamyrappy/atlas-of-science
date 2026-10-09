@@ -1,0 +1,49 @@
+# The critic's rules, as shapes: what architecture 6 refuses or sends back for repair.
+#
+# A critic that pattern-matched a record in code would be a second, private statement of
+# rules that belong with the ontology. Written as SHACL they are data, they are versioned
+# with the schema (their bytes are in its hash), and a reviewer can read what the critic
+# checks without reading the critic.
+
+@prefix sh:     <http://www.w3.org/ns/shacl#> .
+@prefix scierc: <https://w3id.org/atlas-of-science/scierc#> .
+@prefix field:  <https://w3id.org/atlas-of-science/fields#> .
+@prefix atlas:  <https://w3id.org/atlas-of-science/substrate#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix oa:     <http://www.w3.org/ns/oa#> .
+
+# A mention with no name is a span with a label on it: nothing can be matched to it, and
+# nothing can be counted.
+scierc:MentionIsNamed a sh:NodeShape ;
+    sh:targetClass scierc:Task, scierc:Method, scierc:Metric, scierc:Material,
+                   scierc:OtherScientificTerm ;
+    sh:property [
+        sh:path field:name ;
+        sh:minCount 1 ;
+        sh:minLength 2 ;
+        sh:severity sh:Violation ;
+        sh:message "a mention records the name it is given in the text" ;
+    ] .
+
+# A quote of one or two characters locates nothing: it matches in too many places for the
+# offsets to mean anything, and the relocation that found it was a coincidence.
+scierc:QuoteIsLongEnough a sh:NodeShape ;
+    sh:targetClass atlas:Node ;
+    sh:property [
+        sh:path ( atlas:evidence oa:hasSelector oa:exact ) ;
+        sh:minLength 3 ;
+        sh:severity sh:Violation ;
+        sh:message "the quote this node stands on is too short to locate anything" ;
+    ] .
+
+# A method compared with itself is a coreference the extractor missed.
+scierc:CompareIsNotReflexive a sh:NodeShape ;
+    sh:targetSubjectsOf scierc:compare ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:severity sh:Warning ;
+        sh:message "a method is recorded as compared with itself" ;
+        sh:select """
+            SELECT $this WHERE { $this <https://w3id.org/atlas-of-science/scierc#compare> $this . }
+        """ ;
+    ] .

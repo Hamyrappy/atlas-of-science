@@ -48,15 +48,22 @@ def overlap(index: Index, question: str) -> dict[str, float]:
 
 
 class Hit(Frozen):
-    """One ranked node and the score it was ranked by.
+    """One ranked node, the score it was ranked by, and which branch of a search found it.
 
     Nothing else: the node carries where it was read from, what it stands on and the
     reference an answer cites it by, and a second copy of any of those would be a
     second thing to keep true.
+
+    `via` is empty for this step, which has one branch and nothing to distinguish. A
+    ranking with several -- the question's own words, a topic they match, a diffusion
+    over the graph -- fills it in, because a node that shares no word with the question
+    and was reached some other way is weaker evidence and a reader should be able to
+    tell which it was looking at.
     """
 
     node: Node
     score: float
+    via: str = ""
 
 
 class RetrieveOptions(Frozen):

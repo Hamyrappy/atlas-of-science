@@ -22,3 +22,6 @@ Thumbs.db
 # a run writes here by default
 /store/
 /renderings/
+
+# a manifest run from a checkout writes its store beside the manifest
+/architectures/store/
