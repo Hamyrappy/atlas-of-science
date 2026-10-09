@@ -113,7 +113,8 @@ def register(
         if taken is not None and taken != step and not replace:
             raise ValueError(
                 f"step {name!r} is already registered by {_origin(taken.function)}, and "
-                f"{_origin(function)} may not replace it: register it under another name, or pass replace=True."
+                f"{_origin(function)} may not replace it: register it under another name, "
+                f"or pass replace=True."
             )
         _STEPS[name] = step
         return function
