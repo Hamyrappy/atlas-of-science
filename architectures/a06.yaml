@@ -22,8 +22,8 @@ variant:
     findings go back to the model at most twice; what is still wrong is quarantined,
     never asserted. Opposed positions are classified as a matter of conditions, of
     extraction, of genuine disagreement or of ambiguity, with disagreement as the
-    default that has to be explained away. The answer is then reviewed for the side it
-    left out.
+    default that has to be explained away. The answer is then reviewed for a side
+    none of its citations reach.
   family: typed traversal with review
   optimises: the cost of a wrong record, and knowing which errors were which
   cost: >-

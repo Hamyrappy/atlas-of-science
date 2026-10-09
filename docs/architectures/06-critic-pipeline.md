@@ -23,7 +23,7 @@ It adds three reviews at three different places:
 2. **When two positions oppose each other** — the pair is classified, and a genuine
    disagreement is kept rather than resolved.
 3. **After the answer is written** — the answer is checked against the package it came
-   from, for the side it left out.
+   from, for a side none of its citations reach.
 
 ## 2. What it is not
 
@@ -138,7 +138,7 @@ already drops a line that cites nothing or cites something that was not shown; t
 what that rule cannot:
 
 - does every citation resolve to a node of the package;
-- if the package held positions on **both** sides, does the answer cite both;
+- if the package held positions on **both** sides, do the citations reach both;
 - was the package partial, and does the reader know.
 
 The second is the point. An answer whose every line is cited and whose every citation is
@@ -147,6 +147,12 @@ side counts as cited when the answer cites either end of one of its relations �
 position, or the claim it is about — because that is how an answer to this kind of
 question is actually written. And a one-sided package answered one-sidedly is complete:
 one-sided evidence answered one-sidedly is a complete answer to the evidence there was.
+
+That rule has a limit, and it is intended. The claim two positions argue over is an end
+of a relation on each side, so an answer citing that claim alone reaches both and is not
+reported, whatever its prose says about either. The check reads citations, not text: it
+reports an answer whose citations all sit on one side's own nodes, and an empty
+`Review.omitted` means no side went uncited — not that both were given a hearing.
 
 Nothing is appended and nothing is rewritten. The review is a verdict and a list; acting
 on it is the configuration's decision, and a step that quietly added the missing side
@@ -173,7 +179,7 @@ question
         one source?            → ambiguous
         otherwise              → disagreement    (the default)
   → graph_answer: entries, relations with direction, both sides named
-  → check_answer: citations resolve? both sides cited? package partial?
+  → check_answer: citations resolve? a side no citation reaches? package partial?
 ```
 
 ## 8. Evolution, from a pattern of findings
@@ -196,7 +202,7 @@ wrong *and* right cases: records that were correct must stay correct.
 |---|---|
 | Why was this statement corrected? | The finding, the repair prompt, the resulting statement |
 | Is this a scientific conflict or an extraction error? | `Conflict.verdict` with its reason and the two quotes |
-| Which side did the answer leave out? | `Review.omitted` |
+| Which side did the answer leave out? | `Review.omitted` — the sides no citation reaches; a shared claim counts for both |
 | What did this run refuse to assert? | `quarantined`, with the findings on each |
 
 ## 10. Risks and acceptance

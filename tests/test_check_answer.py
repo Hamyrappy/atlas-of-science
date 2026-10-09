@@ -2,9 +2,11 @@
 
 The check that matters is the second one: an answer whose every line is cited, and whose
 every citation is real, can still have turned a controversy into a consensus by leaving
-one side out. That is invisible to the line-by-line rule and visible here. The other two
-properties under test are that nothing is added -- the answer comes back exactly as it
-went in -- and that a one-sided package answered one-sidedly is complete.
+one side out. That is invisible to the line-by-line rule and visible here, as far as
+citations show it: an answer citing one side's own nodes is reported, and one citing only
+the claim both sides are about is not, whatever its prose says. The other two properties
+under test are that nothing is added -- the answer comes back exactly as it went in --
+and that a one-sided package answered one-sidedly is complete.
 """
 
 from __future__ import annotations
@@ -61,7 +63,8 @@ def test_citing_the_claim_both_sides_point_at_counts_for_both(science: Fixture) 
     result = check_answer({"answer": answer, "bundle": bundle})
 
     # The claim is an end of both relations, which is how an answer to this kind of
-    # question is actually written.
+    # question is actually written. Intended, and a limit: nothing here reads the prose,
+    # so this answer passes even if its text takes one side.
     assert result["review"].omitted == ()
 
 
