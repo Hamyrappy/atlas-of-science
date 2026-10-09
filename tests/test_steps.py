@@ -146,6 +146,38 @@ def test_calling_a_step_by_name_refuses_the_option_reading_a_file_would() -> Non
         get("count_sources")({"sources": ()}, {"limit": 2})
 
 
+def test_a_name_that_is_taken_is_refused_to_another_function_and_keeps_the_first() -> None:
+    """Silently replacing a step made a run depend on which module was imported last."""
+    taken = get("count_sources")
+
+    with pytest.raises(ValueError, match=re.escape(
+        "step 'count_sources' is already registered by test_steps.count_sources"
+    )) as refused:
+        @register("count_sources", requires=("sources",), produces=("counted",))
+        def count_twice(state: State) -> State:
+            return {"counted": 2 * len(state["sources"])}
+
+    assert "count_twice may not replace it" in str(refused.value)
+    assert get("count_sources") is taken
+
+
+def test_the_same_function_may_not_be_registered_again_with_another_declaration() -> None:
+    with pytest.raises(ValueError, match="step 'count_sources' is already registered"):
+        register("count_sources", requires=("inputs",), produces=("counted",))(count_sources)
+
+    assert get("count_sources").requires == ("sources",)
+
+
+def test_registering_the_very_same_step_again_is_not_an_error() -> None:
+    taken = get("count_sources")
+
+    again = register("count_sources", requires=("sources",), produces=("counted",),
+                     options=Nothing)(count_sources)
+
+    assert again is count_sources
+    assert get("count_sources") == taken
+
+
 @register("count_inputs", produces=("counted",))
 def count_inputs(state: State) -> State:
     """A step registered the shortest way there is, naming no options model."""

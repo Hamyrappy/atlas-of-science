@@ -99,10 +99,21 @@ def register(
 
     A step that does not name an options model takes none, and any option a configuration
     writes under its name is refused: there is no path left that swallows one.
+
+    A name is taken once. Registering something else under it raises a ValueError naming
+    both functions, because the alternative is a configuration that runs whichever module
+    happened to be imported last; registering the very same step again is not an error.
     """
 
     def bind(function: Function) -> Function:
-        _STEPS[name] = Step(name, function, tuple(requires), tuple(produces), options)
+        step = Step(name, function, tuple(requires), tuple(produces), options)
+        taken = _STEPS.get(name)
+        if taken is not None and taken != step:
+            raise ValueError(
+                f"step {name!r} is already registered by {_origin(taken.function)}, and "
+                f"{_origin(function)} may not replace it: register it under another name."
+            )
+        _STEPS[name] = step
         return function
 
     return bind
@@ -117,6 +128,13 @@ def get(name: str) -> Step:
             "name it under `imports:` in the configuration."
         )
     return _STEPS[name]
+
+
+def _origin(function: Function) -> str:
+    """Where a function was written, for a message about two of them wanting one name."""
+    module = getattr(function, "__module__", None)
+    name = getattr(function, "__qualname__", None) or repr(function)
+    return f"{module}.{name}" if module else name
 
 
 def _takes(options: type[Frozen]) -> str:
