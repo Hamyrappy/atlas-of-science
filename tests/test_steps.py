@@ -178,6 +178,18 @@ def test_registering_the_very_same_step_again_is_not_an_error() -> None:
     assert get("count_sources") == taken
 
 
+def test_a_replacement_is_allowed_when_the_caller_says_it_is_meant() -> None:
+    @register("replace_me", produces=("counted",))
+    def first(state: State) -> State:
+        return {"counted": 1}
+
+    @register("replace_me", produces=("counted",), replace=True)
+    def second(state: State) -> State:
+        return {"counted": 2}
+
+    assert get("replace_me").function is second
+
+
 @register("count_inputs", produces=("counted",))
 def count_inputs(state: State) -> State:
     """A step registered the shortest way there is, naming no options model."""

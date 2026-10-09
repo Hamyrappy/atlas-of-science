@@ -94,6 +94,7 @@ def register(
     requires: Iterable[str] = (),
     produces: Iterable[str] = (),
     options: type[Frozen] = Nothing,
+    replace: bool = False,
 ) -> Callable[[Function], Function]:
     """Register a function under a name, declaring the state keys it uses and what it takes.
 
@@ -103,15 +104,16 @@ def register(
     A name is taken once. Registering something else under it raises a ValueError naming
     both functions, because the alternative is a configuration that runs whichever module
     happened to be imported last; registering the very same step again is not an error.
+    `replace=True` is how a caller says the replacement is meant.
     """
 
     def bind(function: Function) -> Function:
         step = Step(name, function, tuple(requires), tuple(produces), options)
         taken = _STEPS.get(name)
-        if taken is not None and taken != step:
+        if taken is not None and taken != step and not replace:
             raise ValueError(
                 f"step {name!r} is already registered by {_origin(taken.function)}, and "
-                f"{_origin(function)} may not replace it: register it under another name."
+                f"{_origin(function)} may not replace it: register it under another name, or pass replace=True."
             )
         _STEPS[name] = step
         return function
