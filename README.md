@@ -303,7 +303,6 @@ docs/
   evaluation.md      the measurement contract: competency questions, seams, negative controls
   initiative.ru.md   the Russian write-up of the initiative
 CLAUDE.md            how to work in this repository: invariants, layout, direction
-HANDOFF.md           what the work stands at, and the bar the next agent has to meet
 index.html           the project page
 ```
 

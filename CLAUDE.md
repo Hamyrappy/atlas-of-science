@@ -7,9 +7,8 @@ Atlas of Science is a substrate for machine-readable markup: a small metamodel t
 1. `README.md` — what the library does and how to run it.
 2. `docs/overview.md` — the same thing in six diagrams: the two chains, the six concepts, the
    four invariants, what a step is. Fifteen minutes, and the rest of this file will make sense.
-3. `HANDOFF.md` — where the work stands, the bar the code is held to, and the traps already paid for.
-4. `docs/architecture.md` — the metamodel, the step model, the store, provenance end to end.
-5. `atlas/model/` — the six types everything else exchanges. Read the files themselves; nothing here restates them.
+3. `docs/architecture.md` — the metamodel, the step model, the store, provenance end to end.
+4. `atlas/model/` — the six types everything else exchanges. Read the files themselves; nothing here restates them.
 
 Then the module you are about to change, and its tests. Do not start from a grep.
 
@@ -98,9 +97,6 @@ stopped holding is worse than no claim, because it is trusted.
 - `docs/architecture.md` — the metamodel, the step model, the store, provenance end to end, and the
   open questions. The reference a contributor reads before touching anything.
 - `docs/ontology.md` and `docs/evaluation.md` — how an ontology is written, loaded and reasoned over, and what is measured where.
-- `HANDOFF.md` — for whoever continues this: where the work stands, the standard the code is held
-  to with the examples that show it, how to add the next architecture, and the traps already paid
-  for. It changes when the state of the work changes, which is most commits that add a step.
 - `docs/architectures/` — one specification per architecture, opening the same way so two can be
   read side by side, plus the rule they all obey.
 

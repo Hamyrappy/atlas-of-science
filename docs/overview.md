@@ -245,7 +245,6 @@ way a rule stated in a document stays true.
 |---|---|
 | run it | `README.md` |
 | know what must not break | `CLAUDE.md` |
-| continue somebody's work | `HANDOFF.md` |
 | understand the store, provenance, versioning | `docs/architecture.md` |
 | write an ontology, choose a profile, run an engine | `docs/ontology.md` |
 | choose between the fifteen | `docs/architectures/README.md` |
