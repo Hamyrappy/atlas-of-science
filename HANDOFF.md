@@ -14,6 +14,16 @@ has quietly stopped being true is worse than none, because the next agent will t
 
 ## 1. Where the work stands
 
+**Schema-typed RDF field values, 2026-10-09.** ABox fields remain their original
+lexical strings in nodes. Their temporary RDF projection now applies the declared
+inherited datatype (decimal for the vocabulary's `number`, integer, boolean, date,
+dateTime or anyURI); ordinary strings and undeclared fields stay plain literals.
+Normalization is disabled, preserving the original lexical value. This fixes valid
+numeric records being discarded by explicit decimal SHACL constraints. Invalid
+lexical values remain invalid and are refused by SHACL. Whole suite: 860 passed;
+Ruff clean. The platform must advance its pin and run its entire regression suite.
+
+
 **Exact source populations, 2026-10-07.** Strict Resolve with no class selects the
 complete bounded graph and carries every possible declared class for later checks.
 Strict Aggregate accepts `value: sources` and counts distinct original source ids

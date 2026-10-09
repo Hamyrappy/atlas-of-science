@@ -86,7 +86,16 @@ def to_graph(
         g.add((subject, RDF.type, class_iri(schema, node.type)))
         g.add((subject, ATLAS.schemaVersion, Literal(node.schema_version)))
         for name, value in node.fields.items():
-            g.add((subject, field_iri(schema, node.type, name), Literal(value)))
+            declared = next((one for one in schema.declared_fields(node.type)
+                             if one.name == name), None)
+            datatype = declared.datatype if declared is not None else "string"
+            target = {"number": XSD.decimal, "integer": XSD.integer,
+                      "boolean": XSD.boolean, "date": XSD.date, "datetime": XSD.dateTime,
+                      "iri": XSD.anyURI}.get(datatype)
+            # Fields remain lexical strings in the property graph. Their temporary
+            # RDF projection must carry the schema datatype for SHACL to judge it.
+            g.add((subject, field_iri(schema, node.type, name),
+                   Literal(value, datatype=target, normalize=False)))
         for span in node.spans:
             g.add((subject, ATLAS.evidence, _span(g, span)))
     for node_id, type_name in typings:
